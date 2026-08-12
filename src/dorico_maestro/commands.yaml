@@ -1,0 +1,1332 @@
+# Dorico Maestro - command catalog (data-driven registry).
+#
+# One entry per Dorico Remote Control command. The first block is the
+# complete Dorico 6 key-command catalog (340 IDs, verbatim from
+# docs/dorico_command_catalog.md). The final block adds canonical
+# parameterised base commands the catalog only ships in value-baked
+# form. Loaded by registry.py -> spec.CommandSpec. See docs/architecture.md.
+#
+# status values:
+#   verified  - sent over the Remote Control API and its effect confirmed.
+#   untested  - not yet exercised over the API.
+#   broken    - not usable over the Remote Control API: it returns
+#               kUnknownCommand or produces no effect. (Some broken ids are
+#               real Dorico keyboard commands the API just does not expose.)
+#
+# Regenerate the raw catalog with scripts/extract_catalog.ps1;
+# merge new IDs from a live keycommands.json with scripts/sync_catalog.py.
+
+  # ---- Application (1) -----------------------------------------
+  - id: "Application.Preferences"
+    category: Application
+    status: untested
+
+  # ---- Edit (16) ------------------------------------------------
+  - id: "Edit.Copy"
+    category: Edit
+    status: verified
+    doc: "Copy the current selection."
+  - id: "Edit.CreateFrameBreak"
+    category: Edit
+    status: untested
+  - id: "Edit.CreateMarker"
+    category: Edit
+    status: untested
+  - id: "Edit.CreateSystemBreak"
+    category: Edit
+    status: untested
+  - id: "Edit.CrossStaffAbove"
+    category: Edit
+    status: untested
+  - id: "Edit.CrossStaffBelow"
+    category: Edit
+    status: untested
+  - id: "Edit.Cut"
+    category: Edit
+    status: untested
+    destructive: true
+    doc: "Cut the current selection."
+  - id: "Edit.Delete"
+    category: Edit
+    status: verified
+    destructive: true
+    doc: "Delete the current selection. Edit.SelectAll then Edit.Delete clears a flow to rests."
+  - id: "Edit.FlipItem"
+    category: Edit
+    status: untested
+  - id: "Edit.GoTo"
+    category: Edit
+    status: untested
+    doc: "Open the Go To dialog (bar / rehearsal-mark navigation)."
+  - id: "Edit.Paste"
+    category: Edit
+    status: untested
+    doc: "Paste at the caret / selection."
+  - id: "Edit.Redo"
+    category: Edit
+    status: untested
+    doc: "Redo the last undone action."
+  - id: "Edit.SelectAll"
+    category: Edit
+    status: verified
+    doc: "Select everything in the current context."
+  - id: "Edit.SelectMore"
+    category: Edit
+    status: verified
+    doc: "Extend the selection to the next larger scope."
+  - id: "Edit.SelectNone"
+    category: Edit
+    status: verified
+    doc: "Clear the selection (deselect)."
+  - id: "Edit.Undo"
+    category: Edit
+    status: verified
+    doc: "Undo the last action."
+
+  # ---- Engrave (2) ---------------------------------------------
+  - id: "Engrave.EnterEdit"
+    category: Engrave
+    status: untested
+  - id: "Engrave.Options"
+    category: Engrave
+    status: untested
+
+  # ---- EventEdit (57) -------------------------------------------
+  - id: "EventEdit.DurationLengthen"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.DurationLengthenByGrid"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.DurationShorten"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.DurationShortenByGrid"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.EditExistingOrEnterStepTimeInput"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.MoveLeft"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.MoveLeftByGrid"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.MoveRight"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.MoveRightByGrid"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.MoveToStaveAbove"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.MoveToStaveBelow"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateDown"
+    category: EventEdit
+    status: verified
+  - id: "EventEdit.NavigateDownExtend"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateDownExtendBottom"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateDownNextStave"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateLeft"
+    category: EventEdit
+    status: verified
+  - id: "EventEdit.NavigateLeftBar"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateLeftExtend"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateLeftExtendBar"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateNextFragment"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateNextItemSamePosition"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigatePreviousFragment"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigatePreviousItemSamePosition"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateRight"
+    category: EventEdit
+    status: verified
+  - id: "EventEdit.NavigateRightBar"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateRightExtend"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateRightExtendBar"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateUp"
+    category: EventEdit
+    status: verified
+  - id: "EventEdit.NavigateUpExtend"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateUpExtendTop"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.NavigateUpNextStave"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Down&Amount=kALittle"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Down&Amount=kALittle&AlternateNudgeMode=true"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Down&Amount=kALot"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Down&Amount=kALot&AlternateNudgeMode=true"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Down&Amount=kATinyAmount"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Down&Amount=kModerate"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Left&Amount=kALittle"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Left&Amount=kALittle&AlternateNudgeMode=true"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Left&Amount=kALot"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Left&Amount=kALot&AlternateNudgeMode=true"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Left&Amount=kATinyAmount"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Left&Amount=kModerate"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Right&Amount=kALittle"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Right&Amount=kALittle&AlternateNudgeMode=true"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Right&Amount=kALot"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Right&Amount=kALot&AlternateNudgeMode=true"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Right&Amount=kATinyAmount"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Right&Amount=kModerate"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Up&Amount=kALittle"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Up&Amount=kALittle&AlternateNudgeMode=true"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Up&Amount=kALot"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Up&Amount=kALot&AlternateNudgeMode=true"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Up&Amount=kATinyAmount"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.Nudge?Direction=Up&Amount=kModerate"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.ShowAllChordDiagramVariantsForPlayer"
+    category: EventEdit
+    status: untested
+  - id: "EventEdit.ShowNextChordDiagramVariant"
+    category: EventEdit
+    status: untested
+
+  # ---- File (9) ------------------------------------------------
+  - id: "File.Close"
+    category: File
+    status: untested
+    destructive: true
+    doc: "Close the current tab/window; may discard unsaved changes."
+  - id: "File.CloseProject"
+    category: File
+    status: untested
+    destructive: true
+    doc: "Close the current project; may discard unsaved changes."
+  - id: "File.Exit"
+    category: File
+    status: untested
+    destructive: true
+    doc: "Quit Dorico; may discard unsaved changes."
+  - id: "File.New"
+    category: File
+    status: untested
+    doc: "Create a new project."
+  - id: "File.Open"
+    category: File
+    status: untested
+    params:
+      - {name: file, dorico: File, required: true}
+      - {name: filter_id, dorico: FilterID}
+    doc: "Open a project or importable file. MusicXML import uses FilterID=MusicXMLImportFilter (see that entry). Opening a native project file is untested."
+  - id: "File.Open?FilterID=MusicXMLImportFilter"
+    category: File
+    status: verified
+    doc: "Import a MusicXML file as a new flow. Pass the path raw with forward slashes (Dorico does not URL-decode the value; a path with & ? # cannot be passed). Dorico may pop a 'create a new player?' dialog the user must confirm. To merge into an existing sheet instead, use write_score(method='caret'). See docs/protocol.md §8."
+  - id: "File.Save"
+    category: File
+    status: verified
+    doc: "Save the current project. On an untitled project this triggers a Save-As dialog the API can't fill."
+  - id: "File.SaveAs"
+    category: File
+    status: untested
+    doc: "Save the current project under a new name."
+  - id: "File.ScoreInfo"
+    category: File
+    status: untested
+    doc: "Open the Project Info dialog."
+
+  # ---- Help (1) ------------------------------------------------
+  - id: "Help.ShowOverlay"
+    category: Help
+    status: untested
+
+  # ---- JumpBar (2) ---------------------------------------------
+  - id: "JumpBar.CommandsMode"
+    category: JumpBar
+    status: untested
+  - id: "JumpBar.GotoMode"
+    category: JumpBar
+    status: untested
+
+  # ---- NoteEdit (8) --------------------------------------------
+  - id: "NoteEdit.PitchDown"
+    category: NoteEdit
+    status: untested
+    doc: "Move selected notes down one diatonic step."
+  - id: "NoteEdit.PitchDownChromatic"
+    category: NoteEdit
+    status: untested
+    doc: "Move selected notes down one chromatic step."
+  - id: "NoteEdit.PitchDownOctave"
+    category: NoteEdit
+    status: untested
+    doc: "Move selected notes down one octave."
+  - id: "NoteEdit.PitchUp"
+    category: NoteEdit
+    status: untested
+    doc: "Move selected notes up one diatonic step."
+  - id: "NoteEdit.PitchUpChromatic"
+    category: NoteEdit
+    status: untested
+    doc: "Move selected notes up one chromatic step."
+  - id: "NoteEdit.PitchUpOctave"
+    category: NoteEdit
+    status: untested
+    doc: "Move selected notes up one octave."
+  - id: "NoteEdit.RespellUsingNoteNameAbove"
+    category: NoteEdit
+    status: untested
+    doc: "Respell selection using the note name above."
+  - id: "NoteEdit.RespellUsingNoteNameBelow"
+    category: NoteEdit
+    status: untested
+    doc: "Respell selection using the note name below."
+
+  # ---- NoteInput (123) -------------------------------------------
+  - id: "NoteInput.CreateBarLine"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.CreateClef"
+    category: NoteInput
+    status: verified
+    doc: "Opens the clef popover; the user types e.g. alto/bass + Enter (the API can't type the text). The whole Create* popover family behaves the same — drive it via the open_popover tool."
+  - id: "NoteInput.CreateCue"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.CreateDynamic"
+    category: NoteInput
+    status: verified
+    doc: "Opens Dorico's dynamics (Shift+D) popover; the Remote API cannot type into it — the user types the value (e.g. f) + Enter. Drive it via the open_popover tool. Same pattern for CreateTempo/CreateKeySignature/CreateTimeSignature/CreateClef; for a hands-free result use the MusicXML path."
+  - id: "NoteInput.CreateGraceNote"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Toggle grace-note input at the caret; enter the grace pitch(es), toggle off, then the main note. Slashed vs unslashed shows in the graceNoteSlashed/Unslashed status."
+  - id: "NoteInput.CreateKeySignature"
+    category: NoteInput
+    status: verified
+    doc: "Opens the key-signature (Shift+K) popover; the user types e.g. G + Enter (the API can't type the text)."
+  - id: "NoteInput.CreateOrnament"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.CreatePause"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.CreatePlayingTechnique"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.CreateRehearsalMark"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.CreateSlashedVoice"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.CreateSystemText?ParagraphStyleID=paragraph.defaulttext"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.CreateTempo"
+    category: NoteInput
+    status: verified
+    doc: "Opens the tempo (Shift+T) popover; the user types e.g. Allegro q=120 + Enter (the API can't type the text)."
+  - id: "NoteInput.CreateText?ParagraphStyleID=paragraph.defaulttext"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.CreateTimeSignature"
+    category: NoteInput
+    status: verified
+    doc: "Opens the time-signature (Shift+M) popover; the user types e.g. 3/4 + Enter and bars reflow (the API can't type the text)."
+  - id: "NoteInput.CreateVoice"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Start a new voice at the caret. Enables multi-voice input (render currently writes voice 1 only)."
+  - id: "NoteInput.CycleNumDots"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Cycle the number of rhythmic dots."
+  - id: "NoteInput.DeleteLeft"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    destructive: true
+    doc: "Delete backwards from the caret."
+  - id: "NoteInput.DeleteRight"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    destructive: true
+    doc: "Delete forwards from the caret."
+  - id: "NoteInput.EditLockPosition"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.EndTupletRun"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.Enter"
+    category: NoteInput
+    status: verified
+    doc: "Enter note-input mode (caret on)."
+  - id: "NoteInput.Exit"
+    category: NoteInput
+    status: verified
+    doc: "Exit note-input mode (caret off)."
+  - id: "NoteInput.ExtendDown"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.ExtendUp"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.ForceDuration"
+    category: NoteInput
+    status: untested
+    requires_note_input: true
+    doc: "Force the written duration (no notation rounding)."
+  - id: "NoteInput.Fret?FretPosition=0"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Input the note at fret 0 (tablature)."
+  - id: "NoteInput.Fret?FretPosition=1"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Input the note at fret 1 (tablature)."
+  - id: "NoteInput.Fret?FretPosition=2"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Input the note at fret 2 (tablature)."
+  - id: "NoteInput.Fret?FretPosition=3"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Input the note at fret 3 (tablature)."
+  - id: "NoteInput.Fret?FretPosition=4"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Input the note at fret 4 (tablature)."
+  - id: "NoteInput.Fret?FretPosition=5"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Input the note at fret 5 (tablature)."
+  - id: "NoteInput.Fret?FretPosition=6"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Input the note at fret 6 (tablature)."
+  - id: "NoteInput.Fret?FretPosition=7"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Input the note at fret 7 (tablature)."
+  - id: "NoteInput.Fret?FretPosition=8"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Input the note at fret 8 (tablature)."
+  - id: "NoteInput.Fret?FretPosition=9"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Input the note at fret 9 (tablature)."
+  - id: "NoteInput.GraceNoteSlashToggle"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.GridResolutionDecrease"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.GridResolutionIncrease"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.HairpinStart?Type=kGradualDynamicDown&GradualDynamicType=kCrescOrDim"
+    category: NoteInput
+    status: verified
+    doc: "Start a diminuendo hairpin."
+  - id: "NoteInput.HairpinStart?Type=kGradualDynamicDown&GradualDynamicType=kMessaDiVoce"
+    category: NoteInput
+    status: verified
+    doc: "Start a messa di voce hairpin."
+  - id: "NoteInput.HairpinStart?Type=kGradualDynamicUp&GradualDynamicType=kCrescOrDim"
+    category: NoteInput
+    status: verified
+    doc: "Start a crescendo hairpin."
+  - id: "NoteInput.HairpinStart?Type=kGradualDynamicUp&GradualDynamicType=kMessaDiVoce"
+    category: NoteInput
+    status: verified
+    doc: "Start a messa di voce hairpin."
+  - id: "NoteInput.HairpinStop"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.InsertScopeCycle"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.Locked"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.Mode"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.MoveAdvance"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.MoveDown"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.MoveDownBottom"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.MoveLeft"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.MoveLeftBar"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.MoveRight"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.MoveRightBar"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.MoveUp"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.MoveUpTop"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.NextVoice"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.NoteValue?LogDuration=k128Note"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Set the input note value to a 128th note."
+  - id: "NoteInput.NoteValue?LogDuration=kBreve"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Set the input note value to a breve (double whole note)."
+  - id: "NoteInput.NoteValue?LogDuration=kCrotchet"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Set the input note value to a quarter note."
+  - id: "NoteInput.NoteValue?LogDuration=kDemiSemiQuaver"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Set the input note value to a 32nd note."
+  - id: "NoteInput.NoteValue?LogDuration=kHemiDemiSemiQuaver"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Set the input note value to a 64th note."
+  - id: "NoteInput.NoteValue?LogDuration=kMinim"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Set the input note value to a half note."
+  - id: "NoteInput.NoteValue?LogDuration=kQuaver"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Set the input note value to a eighth note."
+  - id: "NoteInput.NoteValue?LogDuration=kSemibreve"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Set the input note value to a whole note."
+  - id: "NoteInput.NoteValue?LogDuration=kSemiQuaver"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Set the input note value to a 16th note."
+  - id: "NoteInput.NoteValueLonger"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Lengthen the input note value one step."
+  - id: "NoteInput.NoteValueShorter"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Shorten the input note value one step."
+  - id: "NoteInput.PedalLineStop"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.Pitch?Pitch=A"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch A nearest the previous note."
+  - id: "NoteInput.Pitch?Pitch=A&Down=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch A below the previous note."
+  - id: "NoteInput.Pitch?Pitch=A&Up=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch A above the previous note."
+  - id: "NoteInput.Pitch?Pitch=B"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch B nearest the previous note."
+  - id: "NoteInput.Pitch?Pitch=B&Down=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch B below the previous note."
+  - id: "NoteInput.Pitch?Pitch=B&Up=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch B above the previous note."
+  - id: "NoteInput.Pitch?Pitch=C"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch C nearest the previous note."
+  - id: "NoteInput.Pitch?Pitch=C&Down=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch C below the previous note."
+  - id: "NoteInput.Pitch?Pitch=C&Up=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch C above the previous note."
+  - id: "NoteInput.Pitch?Pitch=D"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch D nearest the previous note."
+  - id: "NoteInput.Pitch?Pitch=D&Down=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch D below the previous note."
+  - id: "NoteInput.Pitch?Pitch=D&Up=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch D above the previous note."
+  - id: "NoteInput.Pitch?Pitch=E"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch E nearest the previous note."
+  - id: "NoteInput.Pitch?Pitch=E&Down=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch E below the previous note."
+  - id: "NoteInput.Pitch?Pitch=E&Up=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch E above the previous note."
+  - id: "NoteInput.Pitch?Pitch=F"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch F nearest the previous note."
+  - id: "NoteInput.Pitch?Pitch=F&Down=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch F below the previous note."
+  - id: "NoteInput.Pitch?Pitch=F&Up=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch F above the previous note."
+  - id: "NoteInput.Pitch?Pitch=G"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch G nearest the previous note."
+  - id: "NoteInput.Pitch?Pitch=G&Down=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch G below the previous note."
+  - id: "NoteInput.Pitch?Pitch=G&Up=true"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Add pitch G above the previous note."
+  - id: "NoteInput.Pitch?Pitch=X"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    doc: "Repeat the previous pitch."
+  - id: "NoteInput.PitchBeforeDurationToggle"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.RepeatLast"
+    category: NoteInput
+    status: verified
+  - id: "NoteInput.ReplyToComment"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.RestMode"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Toggle rest input: the next duration entered becomes a rest."
+  - id: "NoteInput.Scissor"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.ScissorWithMultipleSplits"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.SetAccidental?Type=kFlat"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Apply a flat to the note being input."
+  - id: "NoteInput.SetAccidental?Type=kNatural"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Apply a natural to the note being input."
+  - id: "NoteInput.SetAccidental?Type=kSharp"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Apply a sharp to the note being input."
+  - id: "NoteInput.SetArticulation?Value=kAccent"
+    category: NoteInput
+    status: verified
+    doc: "Apply accent articulation."
+  - id: "NoteInput.SetArticulation?Value=kMarcato"
+    category: NoteInput
+    status: verified
+    doc: "Apply marcato articulation."
+  - id: "NoteInput.SetArticulation?Value=kStaccatissimo"
+    category: NoteInput
+    status: verified
+    doc: "Apply staccatissimo articulation."
+  - id: "NoteInput.SetArticulation?Value=kStaccato"
+    category: NoteInput
+    status: verified
+    doc: "Apply staccato articulation."
+  - id: "NoteInput.SetArticulation?Value=kStaccatoTenuto"
+    category: NoteInput
+    status: verified
+    doc: "Apply staccato-tenuto articulation."
+  - id: "NoteInput.SetArticulation?Value=kStress"
+    category: NoteInput
+    status: verified
+    doc: "Apply stress articulation."
+  - id: "NoteInput.SetArticulation?Value=kTenuto"
+    category: NoteInput
+    status: verified
+    doc: "Apply tenuto articulation."
+  - id: "NoteInput.SetArticulation?Value=kUnstress"
+    category: NoteInput
+    status: verified
+    doc: "Apply unstress articulation."
+  - id: "NoteInput.SetDotted"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Toggle a rhythmic dot on the input duration."
+  - id: "NoteInput.ShowCommentDialog"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.ShowFingeringPopover"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.ShowMIDITriggerRegionPopover"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.ShowNoteInputOptions"
+    category: NoteInput
+    status: broken
+    doc: "Real Dorico keyboard command, but the Remote Control API returns kUnknownCommand, so it cannot be invoked remotely."
+  - id: "NoteInput.ShowPopoverForTransposingOrAddingNotes"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.ShowRepeatsPopover"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.SlurStart"
+    category: NoteInput
+    status: verified
+    doc: "Start a slur at the caret."
+  - id: "NoteInput.SlurStop"
+    category: NoteInput
+    status: verified
+    doc: "End the current slur."
+  - id: "NoteInput.StartChordSymbolInput"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.StartEndChord"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Toggle chord mode (stack pitches on the same beat)."
+  - id: "NoteInput.StartFiguredBassInput"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.StartLyricInput"
+    category: NoteInput
+    status: untested
+  - id: "NoteInput.StartTupletRun"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Start a tuplet run at the caret; enter the notes, then NoteInput.EndTupletRun. The ratio/number (e.g. 3:2) comes from the tuplet popover — without it Dorico groups the notes but may not print the number."
+  - id: "NoteInput.Tie"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    doc: "Tie the note being input to the previous one (works across a barline)."
+
+  # ---- OptionsDialog (5) ---------------------------------------
+  - id: "OptionsDialog.CloseFind"
+    category: OptionsDialog
+    status: untested
+  - id: "OptionsDialog.Filter"
+    category: OptionsDialog
+    status: untested
+  - id: "OptionsDialog.Find"
+    category: OptionsDialog
+    status: untested
+  - id: "OptionsDialog.NextResult"
+    category: OptionsDialog
+    status: untested
+  - id: "OptionsDialog.PreviousResult"
+    category: OptionsDialog
+    status: untested
+
+  # ---- Page (2) ------------------------------------------------
+  - id: "Page.MoveBarsToNextSystem"
+    category: Page
+    status: untested
+  - id: "Page.MoveBarsToPreviousSystem"
+    category: Page
+    status: untested
+
+  # ---- Play (30) ------------------------------------------------
+  - id: "Play.Forward"
+    category: Play
+    status: verified
+  - id: "Play.LaneSizeDecrease"
+    category: Play
+    status: verified
+  - id: "Play.LaneSizeIncrease"
+    category: Play
+    status: verified
+  - id: "Play.NavigateBackwards"
+    category: Play
+    status: broken
+    doc: "Real Dorico keyboard command, but the Remote Control API returns kUnknownCommand, so it cannot be invoked remotely; use the verified transport commands (Play.Forward etc.) instead."
+  - id: "Play.NavigateForwards"
+    category: Play
+    status: broken
+    doc: "Real Dorico keyboard command, but the Remote Control API returns kUnknownCommand, so it cannot be invoked remotely; use the verified transport commands (Play.Forward etc.) instead."
+  - id: "Play.NextFrame"
+    category: Play
+    status: verified
+  - id: "Play.PreviousFrame"
+    category: Play
+    status: verified
+  - id: "Play.Record"
+    category: Play
+    status: untested
+    doc: "Toggle MIDI recording."
+  - id: "Play.Refresh"
+    category: Play
+    status: verified
+  - id: "Play.RetrospectiveRecord"
+    category: Play
+    status: untested
+  - id: "Play.Rewind"
+    category: Play
+    status: verified
+  - id: "Play.SetKeyEditorTool1"
+    category: Play
+    status: verified
+  - id: "Play.SetKeyEditorTool2"
+    category: Play
+    status: verified
+  - id: "Play.SetKeyEditorTool3"
+    category: Play
+    status: verified
+  - id: "Play.SetKeyEditorTool4"
+    category: Play
+    status: verified
+  - id: "Play.SetKeyEditorTool5"
+    category: Play
+    status: verified
+  - id: "Play.SetKeyEditorTool6"
+    category: Play
+    status: verified
+  - id: "Play.SetPlayheadTo?PlayFromLocation=kSelection"
+    category: Play
+    status: verified
+    doc: "Move the playhead to the selection."
+  - id: "Play.SetPlayheadToFlowStart"
+    category: Play
+    status: verified
+    doc: "Move the playhead to the start of the flow."
+  - id: "Play.ShowPlaybackOptions"
+    category: Play
+    status: verified
+    doc: "Open the Playback Options dialog."
+  - id: "Play.SoloFromSelection"
+    category: Play
+    status: untested
+  - id: "Play.StartOrStop?PlayFromLocation=kLastStartPosition"
+    category: Play
+    status: verified
+    doc: "Start or stop playback from the last start position."
+  - id: "Play.StartOrStop?PlayFromLocation=kPlayhead"
+    category: Play
+    status: verified
+    doc: "Start or stop playback from the playhead."
+  - id: "Play.StartOrStop?PlayFromLocation=kSelection"
+    category: Play
+    status: verified
+    doc: "Start or stop playback from the selection."
+  - id: "Play.StartOrStop?PlayFromLocation=kStartOfFlow"
+    category: Play
+    status: verified
+    doc: "Start or stop playback from the start of the flow."
+  - id: "Play.StartScrubPlayback"
+    category: Play
+    status: untested
+  - id: "Play.StartScrubSoloPlayback"
+    category: Play
+    status: untested
+  - id: "Play.Stop"
+    category: Play
+    status: verified
+    doc: "Stop playback."
+  - id: "Play.UnMuteAll"
+    category: Play
+    status: verified
+  - id: "Play.UnSoloAll"
+    category: Play
+    status: verified
+
+  # ---- Print (5) -----------------------------------------------
+  - id: "Print.LayoutsPanelSelectAll"
+    category: Print
+    status: untested
+  - id: "Print.PrintPreviewEnd"
+    category: Print
+    status: untested
+  - id: "Print.PrintPreviewHome"
+    category: Print
+    status: untested
+  - id: "Print.PrintPreviewPageDown"
+    category: Print
+    status: untested
+  - id: "Print.PrintPreviewPageUp"
+    category: Print
+    status: untested
+
+  # ---- Project (8) ---------------------------------------------
+  - id: "Project.Ensemble.Choose"
+    category: Project
+    status: untested
+  - id: "Project.Flow.New"
+    category: Project
+    status: untested
+    doc: "Create a new flow."
+  - id: "Project.Flow.NotationOptions"
+    category: Project
+    status: untested
+  - id: "Project.Instrument.New"
+    category: Project
+    status: untested
+    doc: "Add a new instrument."
+  - id: "Project.Layout.New?Type=kCustomScoreLayout"
+    category: Project
+    status: untested
+    doc: "Create a new custom score layout."
+  - id: "Project.Layout.Options"
+    category: Project
+    status: untested
+  - id: "Project.SectionPlayer.New"
+    category: Project
+    status: untested
+    doc: "Add a new section player."
+  - id: "Project.SoloPlayer.New"
+    category: Project
+    status: untested
+    doc: "Add a new solo player."
+
+  # ---- Script (1) ----------------------------------------------
+  - id: "Script.RunLastScript"
+    category: Script
+    status: untested
+    doc: "Re-run the most recently run Lua script."
+
+  # ---- ScrubPlayback (2) ---------------------------------------
+  - id: "ScrubPlayback.StepBackwards"
+    category: ScrubPlayback
+    status: untested
+  - id: "ScrubPlayback.StepForwards"
+    category: ScrubPlayback
+    status: untested
+
+  # ---- Setup (10) -----------------------------------------------
+  - id: "Setup.Delete"
+    category: Setup
+    status: untested
+    destructive: true
+    doc: "Delete the selected player / instrument / flow."
+  - id: "Setup.Insert"
+    category: Setup
+    status: untested
+  - id: "Setup.MoveDown"
+    category: Setup
+    status: untested
+  - id: "Setup.MoveLeft"
+    category: Setup
+    status: untested
+  - id: "Setup.MoveRight"
+    category: Setup
+    status: untested
+  - id: "Setup.MoveToBottom"
+    category: Setup
+    status: untested
+  - id: "Setup.MoveToEnd"
+    category: Setup
+    status: untested
+  - id: "Setup.MoveToStart"
+    category: Setup
+    status: untested
+  - id: "Setup.MoveToTop"
+    category: Setup
+    status: untested
+  - id: "Setup.MoveUp"
+    category: Setup
+    status: untested
+
+  # ---- TextEditor (6) ------------------------------------------
+  - id: "TextEditor.ConvertUnicode"
+    category: TextEditor
+    status: untested
+  - id: "TextEditor.DecreaseFontSize"
+    category: TextEditor
+    status: untested
+  - id: "TextEditor.IncreaseFontSize"
+    category: TextEditor
+    status: untested
+  - id: "TextEditor.ToggleBold"
+    category: TextEditor
+    status: untested
+  - id: "TextEditor.ToggleItalic"
+    category: TextEditor
+    status: untested
+  - id: "TextEditor.ToggleUnderline"
+    category: TextEditor
+    status: untested
+
+  # ---- UI (7) --------------------------------------------------
+  - id: "UI.Escape"
+    category: UI
+    status: untested
+  - id: "UI.SetFocus?Value=kBottomPane"
+    category: UI
+    status: untested
+  - id: "UI.SetFocus?Value=kLeftPane"
+    category: UI
+    status: untested
+  - id: "UI.SetFocus?Value=kRightPane"
+    category: UI
+    status: untested
+  - id: "UI.SetFocus?Value=kScoreView"
+    category: UI
+    status: untested
+  - id: "UI.ShowJumpBar"
+    category: UI
+    status: untested
+  - id: "UI.ToggleDefaultMouseClickTool"
+    category: UI
+    status: untested
+
+  # ---- Video (1) -----------------------------------------------
+  - id: "Video.ShowWindow"
+    category: Video
+    status: untested
+
+  # ---- View (16) ------------------------------------------------
+  - id: "View.FullScreen"
+    category: View
+    status: verified
+  - id: "View.HideInvisibles"
+    category: View
+    status: untested
+  - id: "View.MoveViewportDown"
+    category: View
+    status: verified
+  - id: "View.MoveViewportLeft"
+    category: View
+    status: verified
+  - id: "View.MoveViewportNextPage"
+    category: View
+    status: verified
+  - id: "View.MoveViewportPreviousPage"
+    category: View
+    status: verified
+  - id: "View.MoveViewportRight"
+    category: View
+    status: verified
+  - id: "View.MoveViewportToEnd"
+    category: View
+    status: verified
+  - id: "View.MoveViewportToStart"
+    category: View
+    status: verified
+  - id: "View.MoveViewportUp"
+    category: View
+    status: verified
+  - id: "View.OptionsShowDialog"
+    category: View
+    status: untested
+  - id: "View.ShowSystemTrack"
+    category: View
+    status: verified
+  - id: "View.ZoomDialog"
+    category: View
+    status: untested
+  - id: "View.ZoomIn"
+    category: View
+    status: verified
+  - id: "View.ZoomOut"
+    category: View
+    status: verified
+  - id: "View.ZoomWholePage"
+    category: View
+    status: verified
+
+  # ---- Window (28) ----------------------------------------------
+  - id: "Window.CloseTab"
+    category: Window
+    status: untested
+  - id: "Window.HideAllPanels"
+    category: Window
+    status: verified
+  - id: "Window.KeyEditorZoomInHorizontal"
+    category: Window
+    status: verified
+  - id: "Window.KeyEditorZoomInVertical"
+    category: Window
+    status: verified
+  - id: "Window.KeyEditorZoomOutHorizontal"
+    category: Window
+    status: verified
+  - id: "Window.KeyEditorZoomOutVertical"
+    category: Window
+    status: verified
+  - id: "Window.Minimise"
+    category: Window
+    status: verified
+  - id: "Window.Mixer"
+    category: Window
+    status: verified
+    doc: "Toggle the Mixer window."
+  - id: "Window.NewTab"
+    category: Window
+    status: verified
+  - id: "Window.NewWindow"
+    category: Window
+    status: verified
+  - id: "Window.NextLayout"
+    category: Window
+    status: verified
+  - id: "Window.NextTab"
+    category: Window
+    status: untested
+  - id: "Window.PreviousLayout"
+    category: Window
+    status: verified
+  - id: "Window.PreviousTab"
+    category: Window
+    status: untested
+  - id: "Window.ShowBottomPanel"
+    category: Window
+    status: verified
+  - id: "Window.ShowLeftPanel"
+    category: Window
+    status: verified
+  - id: "Window.ShowRightPanel"
+    category: Window
+    status: verified
+  - id: "Window.ShowToolbar"
+    category: Window
+    status: verified
+  - id: "Window.SwitchLayoutAspectType?LayoutAspectType=kContinuousVerticalViewAspect"
+    category: Window
+    status: verified
+  - id: "Window.SwitchLayoutAspectType?LayoutAspectType=kGalleyViewAspect"
+    category: Window
+    status: verified
+  - id: "Window.SwitchLayoutAspectType?LayoutAspectType=kPageViewAspect"
+    category: Window
+    status: verified
+  - id: "Window.SwitchMode?WindowMode=kEngraveMode"
+    category: Window
+    status: verified
+    doc: "Switch to Engrave mode."
+  - id: "Window.SwitchMode?WindowMode=kPlayMode"
+    category: Window
+    status: verified
+    doc: "Switch to Play mode."
+  - id: "Window.SwitchMode?WindowMode=kPrintMode"
+    category: Window
+    status: verified
+    doc: "Switch to Print mode."
+  - id: "Window.SwitchMode?WindowMode=kSetupMode"
+    category: Window
+    status: verified
+    doc: "Switch to Setup mode."
+  - id: "Window.SwitchMode?WindowMode=kWriteMode"
+    category: Window
+    status: verified
+    doc: "Switch to Write mode."
+  - id: "Window.ToggleScoreAndPartLayout"
+    category: Window
+    status: verified
+  - id: "Window.Transport"
+    category: Window
+    status: verified
+    doc: "Toggle the Transport window."
+
+  # ==== canonical parameterised base commands (not bare in keycommands.json) ====
+  - id: "NoteInput.Pitch"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    verify: note_added
+    params:
+      - {name: pitch, dorico: Pitch, kind: enum, enum: ["A", "B", "C", "D", "E", "F", "G"], required: true}
+      - {name: octave, dorico: OctaveValue, kind: int, required: true}
+    doc: "Input a pitch at the caret (letter A-G in Pitch, scientific octave in OctaveValue). Accidentals are NOT a parameter here: enter them via add_notes (which emits a NoteInput.SetAccidental pre-step) or an explicit NoteInput.SetAccidental."
+  - id: "NoteInput.SetAccidental"
+    category: NoteInput
+    status: verified
+    requires_note_input: true
+    params:
+      - {name: type, dorico: Type, kind: enum, enum: ["kSharp", "kFlat", "kNatural"], required: true}
+    doc: "Set the accidental for the note being input. Values use Dorico's k-prefixed enum (kSharp/kFlat/kNatural)."
+  - id: "Window.SwitchMode"
+    category: Window
+    status: verified
+    params:
+      - {name: mode, dorico: WindowMode, kind: enum, enum: ["kWriteMode", "kEngraveMode", "kPlayMode", "kPrintMode", "kSetupMode"], required: true}
+    doc: "Switch the active window mode."
+  - id: "Play.StartOrStop"
+    category: Play
+    status: verified
+    params:
+      - {name: location, dorico: PlayFromLocation, kind: enum, enum: ["kPlayhead", "kSelection", "kStartOfFlow", "kLastStartPosition"], required: true}
+    doc: "Start or stop playback from the given location."
