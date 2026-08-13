@@ -51,6 +51,31 @@ _KOK_CAVEAT = (
     "happened — verify via get_status, playback, or the score."
 )
 
+# Dorico rhythmic-grid value -> quarter-length, for dead-reckoning beat offsets.
+_GRID_QL: dict[str, float] = {
+    "kSemibreve": 4.0, "kMinim": 2.0, "kCrotchet": 1.0, "kQuaver": 0.5,
+    "kSemiQuaver": 0.25, "kDemiSemiQuaver": 0.125, "kHemiDemiSemiQuaver": 0.0625,
+}
+
+# Selected-note duration value -> friendly name (read_selection).
+_DORICO_DURATION_NAME: dict[str, str] = {
+    "kSemibreve": "whole", "kMinim": "half", "kCrotchet": "quarter",
+    "kQuaver": "eighth", "kSemiQuaver": "sixteenth",
+    "kDemiSemiQuaver": "32nd", "kHemiDemiSemiQuaver": "64th",
+}
+
+# Status articulation flag -> friendly name (read_selection).
+_STATUS_ARTICULATIONS: list[tuple[str, str]] = [
+    ("articulationAccent", "accent"),
+    ("articulationStaccato", "staccato"),
+    ("articulationMarcato", "marcato"),
+    ("articulationTenuto", "tenuto"),
+    ("articulationStaccatissimo", "staccatissimo"),
+    ("articulationStaccatoTenuto", "staccato-tenuto"),
+    ("articulationStressed", "stress"),
+    ("articulationUnstressed", "unstress"),
+]
+
 _MODE_ALIASES: dict[str, str] = {
     "write": "kWriteMode",
     "engrave": "kEngraveMode",
@@ -173,11 +198,14 @@ def _zero_notes_error() -> dict[str, Any]:
 async def _position_caret(client: Any, bar: int, staff: int) -> None:
     """Deterministically drive the caret to ``bar`` (1-based) of ``staff`` (0-based).
 
-    Enters note input, rewinds to bar 1 of the top staff, then advances. It always
-    re-anchors from bar 1, so the result never depends on where the caret happened
-    to be. Leaves note input active.
+    Enters note input **only if it is not already active** — a second
+    ``NoteInput.Enter`` toggles note input back OFF, which would leave the following
+    caret moves with no caret and raise a Dorico error. Then rewinds to bar 1 of the
+    top staff and advances. Always re-anchors from bar 1; leaves note input active.
     """
-    await client.send("NoteInput.Enter")
+    status = await client.status()
+    if not status.get("noteInputActive"):
+        await client.send("NoteInput.Enter")
     await client.send("NoteInput.MoveUpTop")
     for _ in range(64):
         await client.send("NoteInput.MoveLeftBar")
@@ -259,6 +287,36 @@ async def get_status() -> dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+@mcp.tool()
+async def read_selection() -> dict[str, Any]:
+    """Read the PROPERTIES of the currently selected note/event — not its position.
+
+    The Remote API exposes a selected event's rhythmic properties in the pushed
+    status (duration, dots, articulations, accidental, event type) but NOT its
+    pitch and NOT its bar/beat position — those cannot be read (use goto_bar for
+    dead-reckoned positioning). Select a note in Dorico, then call this to learn
+    what kind of note it is. Returns ``{success, has_selection, event_type,
+    duration, dots, articulations, accidental}``.
+    """
+    client = _client_instance()
+    try:
+        await client.connect()
+        st = await client.status()
+    except DoricoConnectionError as e:
+        return {"success": False, "error": str(e)}
+    dur = st.get("duration") or ""
+    return {
+        "success": True,
+        "has_selection": bool(st.get("hasSelection")),
+        "event_type": st.get("selectedEventType"),
+        "duration": _DORICO_DURATION_NAME.get(dur, dur or None),
+        "dots": int(str(st.get("rhythmDots", "0")) or "0"),
+        "articulations": [name for flag, name in _STATUS_ARTICULATIONS if st.get(flag)],
+        "accidental": st.get("accidental") or None,
+        "note": "The API does not expose the selection's pitch or bar/beat position.",
+    }
+
+
 # ------------------------------------------------------------------- note entry
 @mcp.tool()
 async def add_notes(
@@ -267,6 +325,11 @@ async def add_notes(
     as_chord: bool = False,
 ) -> dict[str, Any]:
     """Input notes at the caret, then leave note-input mode cleanly.
+
+    ONE insertion at the current caret. For a SEQUENCE of notes or chords over
+    time, use ``write_score`` / ``render_to_dorico`` with a ScoreSpec (a chord is
+    one event with >=2 pitches) — repeated ``add_notes`` calls do NOT chain: each
+    re-enters note input at the same spot, so successive chords stack on one beat.
 
     Args:
         notes: pitches like ``["C4", "E4", "G4"]`` (letter + optional #/b + octave).
@@ -511,36 +574,50 @@ async def save() -> dict[str, Any]:
 
 
 @mcp.tool()
-async def goto_bar(bar: int, staff: int = 0) -> dict[str, Any]:
-    """Move the caret to the start of a bar and report where it now is.
+async def goto_bar(bar: int, staff: int = 0, beat: float = 1.0) -> dict[str, Any]:
+    """Move the caret to a bar (and optionally a beat within it) and report where it is.
 
     The Remote API cannot *read* the caret position — the status carries no bar or
     beat — so this establishes a KNOWN one by dead-reckoning: it enters note input,
     rewinds to bar 1 of the top staff, then advances to ``bar`` (1-based) and down
-    to ``staff`` (0-based). Because it always re-anchors from bar 1, the result does
-    not depend on where the caret was, so call it before each write batch rather
-    than assuming the caret stayed put — a manual edit in Dorico invalidates any
-    earlier assumption. Returns the ASSUMED position ``{bar, staff, beat}`` (beat 1
-    = the downbeat; positioning within a bar is not attempted). Leaves note input
-    active so a following add_notes/add_rest writes from here.
+    to ``staff`` (0-based). Because it re-anchors from bar 1, the result does not
+    depend on where the caret was, so call it before each write batch — a manual
+    edit in Dorico invalidates any earlier assumption. Returns the ASSUMED
+    ``{bar, staff, beat}``. Leaves note input active so a following add_notes/add_rest
+    writes from here.
+
+    ``beat`` (1-based, in quarter-note beats; 1.0 = the downbeat) advances within
+    the bar by stepping over Dorico's rhythmic grid (``rhythmicGridResolutionValue``);
+    the returned ``beat`` is snapped to that grid. The whole position is
+    dead-reckoned (not read back from Dorico), so confirm for unusual rhythms.
     """
     if bar < 1:
         return {"success": False, "error": "bar must be >= 1 (bars are 1-based)"}
     if staff < 0:
         return {"success": False, "error": "staff must be >= 0 (staves are 0-based)"}
+    if beat < 1:
+        return {"success": False, "error": "beat must be >= 1 (beats are 1-based)"}
     client = _client_instance()
     try:
         await client.connect()
         await _position_caret(client, bar, staff)
+        landed_beat = 1.0
+        if beat > 1:
+            status = await client.status()
+            grid_ql = _GRID_QL.get(status.get("rhythmicGridResolutionValue", "kQuaver"), 0.5)
+            steps = round((beat - 1.0) / grid_ql)
+            for _ in range(max(steps, 0)):
+                await client.send("NoteInput.MoveRight")
+            landed_beat = 1.0 + steps * grid_ql
     except DoricoConnectionError as e:
         return {"success": False, "error": str(e)}
     return {
         "success": True,
-        "caret": {"bar": bar, "staff": staff, "beat": 1.0},
+        "caret": {"bar": bar, "staff": staff, "beat": landed_beat},
         "assumed": True,
         "caveat": (
             "Position is dead-reckoned, not read from Dorico — correct as long as no "
-            "manual edit moved the caret since. Re-anchor with goto_bar if unsure."
+            "manual edit moved the caret since. Beat is snapped to the rhythmic grid."
         ),
     }
 

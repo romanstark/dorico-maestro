@@ -292,6 +292,42 @@ async def test_goto_bar_rejects_bad_bar(fake: FakeClient) -> None:
     assert fake.sent == []  # nothing sent for an invalid bar
 
 
+async def test_goto_bar_beat_steps_over_grid(fake: FakeClient) -> None:
+    fake._status = {"rhythmicGridResolutionValue": "kCrotchet"}  # quarter grid
+    result = await server.goto_bar(2, staff=0, beat=3)
+    assert result["success"] is True
+    assert result["caret"]["beat"] == 3.0
+    assert fake.sent.count("NoteInput.MoveRight") == 2  # two quarter steps to beat 3
+
+
+async def test_goto_bar_skips_enter_when_note_input_active(fake: FakeClient) -> None:
+    # A second NoteInput.Enter would toggle note input OFF and break the moves, so
+    # goto_bar must NOT re-enter when it is already active.
+    fake._status = {"noteInputActive": True}
+    result = await server.goto_bar(2, staff=0)
+    assert result["success"] is True
+    assert "NoteInput.Enter" not in fake.sent
+    assert fake.sent[0] == "NoteInput.MoveUpTop"
+
+
+async def test_read_selection_reports_properties(fake: FakeClient) -> None:
+    fake._status = {
+        "hasSelection": True,
+        "selectedEventType": "kNoteEvent",
+        "duration": "kQuaver",
+        "rhythmDots": "0",
+        "articulationStaccato": True,
+        "accidental": "",
+    }
+    result = await server.read_selection()
+    assert result["success"] is True
+    assert result["has_selection"] is True
+    assert result["event_type"] == "kNoteEvent"
+    assert result["duration"] == "eighth"
+    assert result["articulations"] == ["staccato"]
+    assert result["accidental"] is None
+
+
 # --------------------------------------------------------------- offline theory
 def test_analyze_harmony_offline(fake: FakeClient) -> None:
     result = server.analyze_harmony(WORKED_EXAMPLE)
