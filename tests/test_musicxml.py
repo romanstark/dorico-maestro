@@ -13,6 +13,7 @@ import pytest
 from dorico_maestro.music.musicxml import (
     musicxml_to_score,
     parse_musicxml,
+    read_score,
     score_to_musicxml,
 )
 from dorico_maestro.music.score import score_from_dict
@@ -183,5 +184,47 @@ def test_path_with_spaces_and_ampersand(tmp_path: Path) -> None:
 def test_musicxml_to_score_missing_file_raises(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         musicxml_to_score(tmp_path / "does_not_exist.musicxml")
+
+
+# --------------------------------------------------------------------------- #
+# read_score — bar-by-bar reading
+# --------------------------------------------------------------------------- #
+
+
+def test_read_score_lists_bars_and_pitches(tmp_path: Path) -> None:
+    spec = score_from_dict(_MELODY_SPEC)
+    written = score_to_musicxml(spec, tmp_path / "m.musicxml")
+
+    content = read_score(written)
+    assert content["part_count"] == 1
+    assert content["measure_count"] == 2
+    part = content["parts"][0]
+    assert [m["number"] for m in part["measures"]] == [1, 2]
+    assert [e["pitches"][0] for e in part["measures"][0]["events"]] == ["C4", "D4", "E4"]
+
+
+def test_read_score_bar_filter(tmp_path: Path) -> None:
+    spec = score_from_dict(_MELODY_SPEC)
+    written = score_to_musicxml(spec, tmp_path / "m.musicxml")
+
+    content = read_score(written, bars="2")
+    part = content["parts"][0]
+    assert [m["number"] for m in part["measures"]] == [2]
+    assert [e["pitches"][0] for e in part["measures"][0]["events"]] == ["F4", "G4", "A4"]
+
+
+def test_read_score_reports_chords_and_rests(tmp_path: Path) -> None:
+    spec = score_from_dict(_PIANO_SPEC)
+    written = score_to_musicxml(spec, tmp_path / "p.musicxml")
+
+    content = read_score(written)
+    events = [e for p in content["parts"] for m in p["measures"] for e in m["events"]]
+    assert any(set(e.get("pitches", [])) == {"C5", "E5", "G5"} for e in events)
+    assert any(e.get("rest") for e in events)
+
+
+def test_read_score_missing_file_raises(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        read_score(tmp_path / "nope.musicxml")
 
 

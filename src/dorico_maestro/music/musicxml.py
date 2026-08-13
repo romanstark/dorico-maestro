@@ -216,6 +216,103 @@ def parse_musicxml(path: str | Path) -> dict[str, Any]:
     }
 
 
+def read_score(path: str | Path, bars: str | None = None) -> dict[str, Any]:
+    """Read a MusicXML file into a per-measure, per-part listing of its notes.
+
+    Unlike :func:`parse_musicxml` (a summary), this returns the actual musical
+    content bar by bar, so a caller can inspect the whole piece or a single bar.
+    ``bars`` optionally restricts the output to selected measure numbers: a single
+    bar (``"8"``), an inclusive range (``"8-12"``) or a comma list (``"8,10,12"``);
+    ``None`` returns every bar.
+
+    Returns ``{path, title, composer, key, time_signature, tempo_bpm, part_count,
+    measure_count, bars, parts}``. Each part is ``{name, measures}`` and each
+    measure is ``{number, events}``; an event carries ``{beat, duration, dots, ql}``
+    plus either ``pitches`` (scientific pitch names — one for a note, several for a
+    chord) or ``rest: True``, and ``tie`` when the note is tied. Raises
+    :class:`FileNotFoundError` when the file is missing and :class:`ValueError` on a
+    malformed ``bars`` selector.
+    """
+    src = Path(path)
+    if not src.exists():
+        raise FileNotFoundError(f"MusicXML file not found: {src}")
+
+    score = converter.parse(str(src))
+    wanted = _parse_bar_spec(bars)
+
+    parts_out: list[dict[str, Any]] = []
+    measure_total = 0
+    for index, part in enumerate(score.parts):
+        measures = list(part.getElementsByClass(stream.Measure))
+        measure_total = max(measure_total, len(measures))
+        measures_out = [
+            {"number": m.number, "events": _measure_events(m)}
+            for m in measures
+            if wanted is None or m.number in wanted
+        ]
+        parts_out.append({"name": _part_name(part, index), "measures": measures_out})
+
+    md = score.metadata
+    return {
+        "path": str(src),
+        "title": _safe(lambda: md.bestTitle) if md else None,
+        "composer": _safe(lambda: md.composer) if md else None,
+        "key": _key_name(score),
+        "time_signature": _time_signature(score),
+        "tempo_bpm": _tempo_bpm(score),
+        "part_count": len(parts_out),
+        "measure_count": measure_total,
+        "bars": bars or "all",
+        "parts": parts_out,
+    }
+
+
+def _parse_bar_spec(bars: str | None) -> set[int] | None:
+    """Turn a bar selector (``"8"``, ``"8-12"``, ``"8,10,12"``) into a set of
+    measure numbers, or ``None`` for all bars."""
+    if bars is None:
+        return None
+    wanted: set[int] = set()
+    for token in str(bars).split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if "-" in token:
+            lo, hi = token.split("-", 1)
+            wanted.update(range(int(lo), int(hi) + 1))
+        else:
+            wanted.add(int(token))
+    return wanted or None
+
+
+def _measure_events(measure: stream.Measure) -> list[dict[str, Any]]:
+    """List a measure's notes, chords and rests with pitch, duration and beat.
+
+    Chord symbols (:class:`~music21.harmony.Harmony`) are skipped so they never
+    masquerade as sounding chords.
+    """
+    events: list[dict[str, Any]] = []
+    for el in measure.notesAndRests:
+        if isinstance(el, harmony.Harmony):
+            continue
+        ev: dict[str, Any] = {
+            "beat": _safe(lambda el=el: round(float(el.beat), 3)),
+            "duration": el.duration.type,
+            "dots": el.duration.dots,
+            "ql": round(float(el.duration.quarterLength), 4),
+        }
+        if isinstance(el, note.Rest):
+            ev["rest"] = True
+        elif isinstance(el, chord.Chord):
+            ev["pitches"] = [p.nameWithOctave for p in el.pitches]
+        else:
+            ev["pitches"] = [el.nameWithOctave]
+        if getattr(el, "tie", None) is not None:
+            ev["tie"] = el.tie.type
+        events.append(ev)
+    return events
+
+
 # --------------------------------------------------------------------------- #
 # ScoreSpec bridge (full-fidelity round-trip)
 # --------------------------------------------------------------------------- #

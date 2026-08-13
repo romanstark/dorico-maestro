@@ -239,6 +239,59 @@ async def test_import_musicxml_launches_and_flags_confirmation(fake: FakeClient)
     assert any(c.startswith("File.Open?File=") for c in fake.sent)
 
 
+def test_read_score_tool_reads_content(fake: FakeClient, tmp_path: Any) -> None:
+    # Reads an exported MusicXML file back bar by bar; no Dorico contact.
+    from dorico_maestro.music.musicxml import score_to_musicxml
+    from dorico_maestro.music.score import score_from_dict
+
+    written = score_to_musicxml(score_from_dict(WORKED_EXAMPLE), tmp_path / "worked.musicxml")
+    result = server.read_score(written)
+    assert result["success"] is True
+    assert result["part_count"] >= 1
+    assert result["parts"][0]["measures"]
+    assert fake.sent == []
+
+
+def test_read_score_tool_missing_file(fake: FakeClient) -> None:
+    result = server.read_score("C:/nope/none.musicxml")
+    assert result["success"] is False
+    assert "not found" in result["error"].lower()
+
+
+def test_score_schema_tool_returns_shape() -> None:
+    result = server.score_schema()
+    assert result["success"] is True
+    assert "minimal_flat" in result and "enums" in result
+    assert "quarter" in result["enums"]["duration"]
+
+
+async def test_write_score_zero_notes_is_loud(fake: FakeClient) -> None:
+    # A part with no events parses but writes nothing — fail loudly, never "succeed".
+    result = await server.write_score({"parts": [{"name": "Piano"}]})
+    assert result["success"] is False
+    assert "0 notes" in result["error"]
+    assert "example" in result
+    assert fake.sent == []
+
+
+async def test_goto_bar_positions_and_reports(fake: FakeClient) -> None:
+    result = await server.goto_bar(3, staff=1)
+    assert result["success"] is True
+    assert result["caret"] == {"bar": 3, "staff": 1, "beat": 1.0}
+    # Deterministic anchor: Enter, up-top, rewind to bar 1, then advance.
+    assert fake.sent[0] == "NoteInput.Enter"
+    assert fake.sent[1] == "NoteInput.MoveUpTop"
+    assert fake.sent.count("NoteInput.MoveLeftBar") == 64
+    assert fake.sent.count("NoteInput.MoveRightBar") == 2  # bar 3 -> 2 right moves
+    assert fake.sent.count("NoteInput.MoveDown") == 1  # staff 1 -> 1 down
+
+
+async def test_goto_bar_rejects_bad_bar(fake: FakeClient) -> None:
+    result = await server.goto_bar(0)
+    assert result["success"] is False
+    assert fake.sent == []  # nothing sent for an invalid bar
+
+
 # --------------------------------------------------------------- offline theory
 def test_analyze_harmony_offline(fake: FakeClient) -> None:
     result = server.analyze_harmony(WORKED_EXAMPLE)

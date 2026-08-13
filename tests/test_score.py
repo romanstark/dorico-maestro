@@ -17,6 +17,8 @@ from dorico_maestro.music.score import (
     score_from_dict,
     score_to_dict,
     score_to_music21,
+    spec_schema,
+    total_events,
     validate,
 )
 
@@ -495,3 +497,41 @@ def test_music21_to_score_never_raises_on_empty_score() -> None:
     result = music21_to_score(stream.Score())
     assert isinstance(result, ScoreSpec)
     assert result.parts  # a placeholder part is provided
+
+
+# --------------------------------------------------------------------------- #
+# strict keys, event counting and the schema helper
+# --------------------------------------------------------------------------- #
+
+
+def test_score_from_dict_rejects_unknown_part_key() -> None:
+    # 'notes' instead of 'events' must fail loudly (not silently make an empty part).
+    with pytest.raises(ScoreSpecError, match="notes"):
+        score_from_dict({"parts": [{"name": "Piano", "notes": [{"pitch": "C4"}]}]})
+
+
+def test_score_from_dict_rejects_unknown_event_key() -> None:
+    with pytest.raises(ScoreSpecError, match="dur"):
+        score_from_dict({"parts": [{"name": "P", "events": [{"pitch": "C4", "dur": "quarter"}]}]})
+
+
+def test_total_events_counts_notes_and_rests() -> None:
+    spec = score_from_dict(
+        {"parts": [{"name": "P", "events": [{"pitch": "C4"}, {"pitch": "D4"}, {"pitches": []}]}]}
+    )
+    assert total_events(spec) == 3
+
+
+def test_total_events_zero_for_empty_part() -> None:
+    spec = score_from_dict({"parts": [{"name": "Piano"}]})
+    assert total_events(spec) == 0
+
+
+def test_spec_schema_has_examples_and_enums() -> None:
+    schema = spec_schema()
+    assert "minimal_flat" in schema and "minimal_nested" in schema
+    assert "quarter" in schema["enums"]["duration"]
+    assert "staccato" in schema["enums"]["articulation"]
+    # The advertised example is itself a valid, non-empty spec.
+    assert total_events(score_from_dict(schema["minimal_flat"])) > 0
+    assert total_events(score_from_dict(schema["minimal_nested"])) > 0

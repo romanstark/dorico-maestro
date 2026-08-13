@@ -33,7 +33,13 @@ from dorico_maestro.client import DoricoClient, DoricoConnectionError
 from dorico_maestro.executor import Result, execute
 from dorico_maestro.models import CmdStatus, NoteDuration
 from dorico_maestro.music import musicxml, theory
-from dorico_maestro.music.score import ScoreSpec, ScoreSpecError, score_from_dict
+from dorico_maestro.music.score import (
+    ScoreSpec,
+    ScoreSpecError,
+    score_from_dict,
+    spec_schema,
+    total_events,
+)
 from dorico_maestro.registry import default_registry
 from dorico_maestro.session import NoteInputSession
 from dorico_maestro.spec import CommandSpec
@@ -149,6 +155,36 @@ def _load_spec(score: dict[str, Any]) -> tuple[ScoreSpec | None, dict[str, Any] 
         return score_from_dict(score), None
     except ScoreSpecError as e:
         return None, {"success": False, "error": str(e)}
+
+
+def _zero_notes_error() -> dict[str, Any]:
+    """The loud diagnostic for a spec that parses but carries no notes."""
+    return {
+        "success": False,
+        "error": (
+            "Parsed OK but the score has 0 notes — your events are probably in the "
+            "wrong place. A part needs either a flat 'events' list or nested "
+            "'staves' -> 'voices' -> 'events'. Call score_schema for the exact shape."
+        ),
+        "example": spec_schema()["minimal_flat"],
+    }
+
+
+async def _position_caret(client: Any, bar: int, staff: int) -> None:
+    """Deterministically drive the caret to ``bar`` (1-based) of ``staff`` (0-based).
+
+    Enters note input, rewinds to bar 1 of the top staff, then advances. It always
+    re-anchors from bar 1, so the result never depends on where the caret happened
+    to be. Leaves note input active.
+    """
+    await client.send("NoteInput.Enter")
+    await client.send("NoteInput.MoveUpTop")
+    for _ in range(64):
+        await client.send("NoteInput.MoveLeftBar")
+    for _ in range(max(bar - 1, 0)):
+        await client.send("NoteInput.MoveRightBar")
+    for _ in range(max(staff, 0)):
+        await client.send("NoteInput.MoveDown")
 
 
 def _report_dict(report: render.RenderReport) -> dict[str, Any]:
@@ -475,6 +511,41 @@ async def save() -> dict[str, Any]:
 
 
 @mcp.tool()
+async def goto_bar(bar: int, staff: int = 0) -> dict[str, Any]:
+    """Move the caret to the start of a bar and report where it now is.
+
+    The Remote API cannot *read* the caret position — the status carries no bar or
+    beat — so this establishes a KNOWN one by dead-reckoning: it enters note input,
+    rewinds to bar 1 of the top staff, then advances to ``bar`` (1-based) and down
+    to ``staff`` (0-based). Because it always re-anchors from bar 1, the result does
+    not depend on where the caret was, so call it before each write batch rather
+    than assuming the caret stayed put — a manual edit in Dorico invalidates any
+    earlier assumption. Returns the ASSUMED position ``{bar, staff, beat}`` (beat 1
+    = the downbeat; positioning within a bar is not attempted). Leaves note input
+    active so a following add_notes/add_rest writes from here.
+    """
+    if bar < 1:
+        return {"success": False, "error": "bar must be >= 1 (bars are 1-based)"}
+    if staff < 0:
+        return {"success": False, "error": "staff must be >= 0 (staves are 0-based)"}
+    client = _client_instance()
+    try:
+        await client.connect()
+        await _position_caret(client, bar, staff)
+    except DoricoConnectionError as e:
+        return {"success": False, "error": str(e)}
+    return {
+        "success": True,
+        "caret": {"bar": bar, "staff": staff, "beat": 1.0},
+        "assumed": True,
+        "caveat": (
+            "Position is dead-reckoned, not read from Dorico — correct as long as no "
+            "manual edit moved the caret since. Re-anchor with goto_bar if unsure."
+        ),
+    }
+
+
+@mcp.tool()
 async def open_popover(kind: str, bar: int | None = None, staff: int = 0) -> dict[str, Any]:
     """Open a Dorico input popover (dynamic/tempo/key/time/clef) for the user to fill.
 
@@ -507,15 +578,7 @@ async def open_popover(kind: str, bar: int | None = None, staff: int = 0) -> dic
     try:
         await client.connect()
         if bar is not None:
-            # Best-effort positioning; leaves the caret active on purpose.
-            await client.send("NoteInput.Enter")
-            await client.send("NoteInput.MoveUpTop")
-            for _ in range(64):
-                await client.send("NoteInput.MoveLeftBar")
-            for _ in range(max(bar - 1, 0)):
-                await client.send("NoteInput.MoveRightBar")
-            for _ in range(max(staff, 0)):
-                await client.send("NoteInput.MoveDown")
+            await _position_caret(client, bar, staff)  # leaves the caret active
         resp = await client.send(command_id)
     except DoricoConnectionError as e:
         return {"success": False, "error": str(e)}
@@ -557,6 +620,18 @@ async def run_command(command_id: str, params: dict[str, Any] | None = None) -> 
 
 # ----------------------------------------------------------- score composition
 @mcp.tool()
+def score_schema() -> dict[str, Any]:
+    """Return the ScoreSpec input format write_score/render_to_dorico expect.
+
+    Call this instead of guessing (or reading source): it returns a copyable
+    minimal example in both the flat and nested forms, the allowed enum values
+    (durations, articulations, dynamics, clefs) and the indexing rules. Unknown
+    keys are rejected by the parser, so match this shape exactly.
+    """
+    return {"success": True, **spec_schema()}
+
+
+@mcp.tool()
 async def write_score(score: dict, method: str = "caret", preflight: bool = True) -> dict[str, Any]:
     """Write a whole ScoreSpec into Dorico — the headline composition tool.
 
@@ -578,6 +653,8 @@ async def write_score(score: dict, method: str = "caret", preflight: bool = True
     if err is not None:
         return err
     assert spec is not None
+    if total_events(spec) == 0:
+        return _zero_notes_error()
 
     analysis: dict[str, Any] = {}
     if preflight:
@@ -642,6 +719,8 @@ async def render_to_dorico(score: dict, dry_run: bool = False) -> dict[str, Any]
     if err is not None:
         return err
     assert spec is not None
+    if total_events(spec) == 0:
+        return _zero_notes_error()
 
     client = _client_instance()
     if dry_run:
@@ -685,6 +764,28 @@ def export_musicxml(score: dict, path: str | None = None) -> dict[str, Any]:
     except Exception as e:  # noqa: BLE001 - music21 write can fail many ways
         return {"success": False, "error": f"could not write MusicXML: {e}"}
     return {"success": True, "path": written}
+
+
+@mcp.tool()
+def read_score(path: str, bars: str | None = None) -> dict[str, Any]:
+    """Read an existing MusicXML file bar by bar — the read counterpart to write_score.
+
+    Dorico's Remote API cannot read arbitrary bars (reads are selection-only) and
+    has no export command, so to inspect a piece the user exports it once
+    (File > Export > MusicXML) and this reads that file with music21 — full content,
+    no Dorico contact. ``bars`` optionally limits the output: a single bar (``"8"``),
+    a range (``"8-12"``) or a comma list (``"8,10,12"``); omit it to read the whole
+    score. Returns ``{success, key, time_signature, tempo_bpm, part_count,
+    measure_count, parts, …}`` where each part lists the requested measures with
+    their notes (pitches, durations, beats).
+    """
+    try:
+        content = musicxml.read_score(path, bars)
+    except FileNotFoundError as e:
+        return {"success": False, "error": str(e)}
+    except ValueError as e:
+        return {"success": False, "error": f"invalid bars selector {bars!r}: {e}"}
+    return {"success": True, **content}
 
 
 @mcp.tool()

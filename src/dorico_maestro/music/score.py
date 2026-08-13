@@ -173,6 +173,36 @@ class ScoreSpec:
 # dict -> model
 # --------------------------------------------------------------------------- #
 
+# Keys allowed at each level of a score-spec dict. Unknown keys are rejected so a
+# misplaced value (e.g. ``notes`` instead of ``events``) fails loudly instead of
+# silently producing an empty part.
+_PART_KEYS = frozenset({"name", "instrument", "abbreviation", "staves", "events"})
+_EVENT_KEYS = frozenset(
+    {"pitch", "pitches", "kind", "duration", "dots", "tie",
+     "articulations", "dynamic", "slur", "lyric", "staff", "voice"}
+)
+_KEY_HINTS = {
+    "notes": "events", "note": "events",
+    "pitchs": "pitches", "pitchess": "pitches",
+    "dur": "duration", "length": "duration",
+    "articulation": "articulations", "dynamics": "dynamic",
+    "instr": "instrument", "staffs": "staves", "stave": "staves",
+}
+
+
+def _reject_unknown_keys(raw: Mapping[str, Any], allowed: frozenset[str], path: str) -> None:
+    """Raise if ``raw`` carries keys outside ``allowed`` (with a 'did you mean' hint)."""
+    unknown = [k for k in raw if k not in allowed]
+    if not unknown:
+        return
+    named = [
+        f"'{k}' (did you mean '{_KEY_HINTS[k]}'?)" if k in _KEY_HINTS else f"'{k}'"
+        for k in unknown
+    ]
+    raise ScoreSpecError(
+        f"{path}: unknown key(s) {', '.join(named)}; allowed: {', '.join(sorted(allowed))}"
+    )
+
 
 def score_from_dict(data: Mapping[str, Any]) -> ScoreSpec:
     """Parse, normalise and validate a score-spec dict into a :class:`ScoreSpec`.
@@ -210,6 +240,77 @@ def score_from_dict(data: Mapping[str, Any]) -> ScoreSpec:
     )
 
 
+def total_events(spec: ScoreSpec) -> int:
+    """Count every event across all parts, staves and voices of ``spec``."""
+    return sum(len(v.events) for p in spec.parts for s in p.staves for v in s.voices)
+
+
+def spec_schema() -> dict[str, Any]:
+    """The ScoreSpec input contract as data: examples, fields, enums and rules.
+
+    Returned by the ``score_schema`` MCP tool so a caller can see the exact shape
+    ``write_score`` / ``render_to_dorico`` expect without reading this module.
+    """
+    return {
+        "summary": (
+            "A ScoreSpec is {parts:[...]} plus optional title/composer/key/time/tempo. "
+            "Each part uses EITHER the flat 'events' shortcut OR nested 'staves'. "
+            "An event with empty 'pitches' is a rest, one pitch is a note, two or more "
+            "is a chord."
+        ),
+        "minimal_flat": {
+            "title": "Sketch", "key": "C major", "time": "4/4", "tempo": 96,
+            "parts": [
+                {"name": "Piano", "instrument": "Piano", "events": [
+                    {"pitches": ["C4"], "duration": "quarter"},
+                    {"pitches": ["E4", "G4"], "duration": "quarter"},
+                    {"pitches": [], "duration": "half"},
+                ]},
+            ],
+        },
+        "minimal_nested": {
+            "parts": [
+                {"name": "Piano", "instrument": "Piano", "staves": [
+                    {"clef": "treble", "voices": [
+                        {"index": 1, "events": [{"pitches": ["C5"], "duration": "quarter"}]},
+                    ]},
+                    {"clef": "bass", "voices": [
+                        {"index": 1, "events": [{"pitches": ["C3"], "duration": "half"}]},
+                    ]},
+                ]},
+            ],
+        },
+        "event_fields": {
+            "pitches": "list of scientific pitch names (['C4']); [] or omit = rest; 2+ = chord",
+            "pitch": "sugar for a single pitch",
+            "duration": "one of the duration enum (default 'quarter')",
+            "dots": "rhythmic dots 0-2 (default 0)",
+            "tie": "bool — tie into the next event",
+            "articulations": "list of the articulation enum",
+            "dynamic": "one of the dynamic enum (MusicXML path only)",
+            "slur": "'start' or 'stop'",
+            "lyric": "string",
+            "staff": "0-based staff index (flat form)",
+            "voice": "1-based voice index (flat form)",
+        },
+        "enums": {
+            "duration": [d.value for d in NoteDuration],
+            "articulation": [a.value for a in Articulation],
+            "dynamic": [d.value for d in Dynamic],
+            "clef": [c.value for c in Clef],
+        },
+        "rules": [
+            "A part uses EITHER 'events' (flat) OR 'staves' (nested), never both.",
+            "staff is 0-based; voice is 1-based.",
+            "Unknown keys are rejected (e.g. 'notes' -> use 'events').",
+            (
+                "The live caret enters pitches/durations/dots/ties/articulations/rests/"
+                "chords; key/time/clef/named-dynamics/tempo are MusicXML-path only."
+            ),
+        ],
+    }
+
+
 def _check_schema_version(version: Any) -> None:
     """Reject any schema whose *major* version is not 1."""
     text = str(version)
@@ -225,6 +326,7 @@ def _part_from_dict(raw: Any, index: int) -> Part:
     path = f"parts[{index}]"
     if not isinstance(raw, Mapping):
         raise ScoreSpecError(f"{path}: part must be a mapping")
+    _reject_unknown_keys(raw, _PART_KEYS, path)
     name = raw.get("name")
     if not isinstance(name, str) or not name.strip():
         raise ScoreSpecError(f"{path}: part 'name' is required")
@@ -334,6 +436,7 @@ def _event_from_dict(raw: Any, path: str) -> Event:
     """Build one :class:`Event`, validating every field loudly."""
     if not isinstance(raw, Mapping):
         raise ScoreSpecError(f"{path}: event must be a mapping")
+    _reject_unknown_keys(raw, _EVENT_KEYS, path)
 
     pitches = _event_pitches(raw, path)
     kind = raw.get("kind")
