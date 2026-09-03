@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # Both operating systems on purpose. Development happens on Windows, so a
+    # Linux-only matrix cannot see a Windows problem at all -- and it cannot see
+    # the interesting case either, where the two disagree. In the sibling project
+    # that disagreement is what exposed a file-mode fault Windows is blind to.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Lint (ruff)
+        run: ruff check src scripts tests
+      - name: Test (pytest)
+        run: pytest -q

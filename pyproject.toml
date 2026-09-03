@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dorico-maestro"
+version = "0.1.0"
+description = "An AI composition partner that remote-controls Steinberg Dorico via MCP."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-or-later" }
+authors = [{ name = "Roman Stark", email = "mail@romanstark.de" }]
+keywords = ["dorico", "mcp", "music", "composition", "notation", "music21"]
+
+dependencies = [
+    "mcp>=1.2,<2",        # FastMCP in mcp.server.fastmcp
+    "websockets>=12",
+    "music21>=9.1",
+    "pyyaml>=6",          # Catalog loader for commands.yaml
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    # Pinned to minor version range to ensure reproducible lint checks.
+    "ruff>=0.16,<0.17",
+]
+
+[project.scripts]
+dorico-maestro = "dorico_maestro.server:main"
+
+[tool.hatch.build.targets.wheel]
+# Package src/dorico_maestro including commands.yaml into the wheel.
+packages = ["src/dorico_maestro"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# Run unit tests and execute docstring examples in src.
+testpaths = ["tests", "src"]
+addopts = ["--doctest-modules"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# Explicitly enforce line length checks.
+extend-select = ["E501"]
