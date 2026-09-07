@@ -140,7 +140,13 @@ async def test_note_input_wraps_command_in_order() -> None:
     client = FakeClient()
     await execute(client, _registry(spec), "NoteInput.RestMode")
 
-    assert client.sent == ["NoteInput.Enter", "NoteInput.RestMode", "NoteInput.Exit"]
+    # Exit leads: Enter is a toggle, so the wrapper normalises the state first.
+    assert client.sent == [
+        "NoteInput.Exit",
+        "NoteInput.Enter",
+        "NoteInput.RestMode",
+        "NoteInput.Exit",
+    ]
 
 
 async def test_no_note_input_when_not_required() -> None:
@@ -158,7 +164,7 @@ async def test_note_input_if_needed_exits_on_error() -> None:
             await client.send("X.Y")
             raise RuntimeError("boom")
     # Exit is guaranteed even when the body raises.
-    assert client.sent == ["NoteInput.Enter", "X.Y", "NoteInput.Exit"]
+    assert client.sent == ["NoteInput.Exit", "NoteInput.Enter", "X.Y", "NoteInput.Exit"]
 
 
 async def test_note_input_if_needed_noop_when_not_required() -> None:

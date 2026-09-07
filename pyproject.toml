@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dorico-maestro"
-version = "0.1.0"
+version = "0.1.2"
 description = "An AI composition partner that remote-controls Steinberg Dorico via MCP."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -25,6 +25,9 @@ dev = [
     "pytest-asyncio>=0.23",
     # Pinned to minor version range to ensure reproducible lint checks.
     "ruff>=0.16,<0.17",
+    # Same reasoning: a checker that moves a rule into its default set would
+    # otherwise fail CI on code nobody touched.
+    "pyright>=1.1,<2",
 ]
 
 [project.scripts]
@@ -39,6 +42,16 @@ asyncio_mode = "auto"
 # Run unit tests and execute docstring examples in src.
 testpaths = ["tests", "src"]
 addopts = ["--doctest-modules"]
+
+[tool.pyright]
+include = ["src", "tests", "scripts"]
+exclude = [".venv"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+# Named explicitly: once this section exists the checker stops guessing at the
+# interpreter, and without it every import of this package reads as missing.
+venvPath = "."
+venv = ".venv"
 
 [tool.ruff]
 line-length = 100

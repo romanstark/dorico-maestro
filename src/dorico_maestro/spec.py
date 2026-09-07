@@ -45,14 +45,11 @@ class CommandSpec:
 
 
 def validate(spec: CommandSpec, **args: object) -> None:
-    """Check ``args`` against ``spec``.
+    """Validate provided arguments against a command specification.
 
-    Raises :class:`ValueError` when an argument is not named by the spec, a
-    required parameter is missing, a parameter that must be handled by a higher
-    layer (``dorico is None``) is supplied to the generic path, an ``enum`` value
-    is not one of the allowed choices, or an ``int`` parameter cannot be cast to
-    ``int``. Rejecting unknown/unserialisable arguments is deliberate: it turns a
-    silently-dropped value into a loud error (see docs/architecture.md).
+    Raises :class:`ValueError` when an argument is unknown, a required
+    parameter is missing, an argument handled by higher layers is passed, an
+    enum value is invalid, or an integer parameter cannot be cast.
     """
     declared = {p.name for p in spec.params}
     unknown = sorted(k for k in args if k not in declared)

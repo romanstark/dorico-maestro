@@ -97,7 +97,7 @@ def test_duration_quarter_length_covers_every_note_value() -> None:
 
 
 def test_duration_to_music21_uses_16th_spelling() -> None:
-    # Our value is "sixteenth" but music21's duration.type is "16th".
+    # NoteDuration value is "sixteenth", while music21 duration.type is "16th".
     assert NoteDuration.SIXTEENTH.value == "sixteenth"
     assert DURATION_TO_MUSIC21[NoteDuration.SIXTEENTH] == "16th"
 

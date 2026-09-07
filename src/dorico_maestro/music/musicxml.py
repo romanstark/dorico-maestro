@@ -174,8 +174,9 @@ def parse_musicxml(path: str | Path) -> dict[str, Any]:
     """Parse a MusicXML file into a plain-dict summary.
 
     The summary has top-level ``path``, ``title``, ``composer``, ``key``,
-    ``time_signature``, ``tempo_bpm``, ``part_count``, ``measure_count`` and
-    ``note_count``, plus a ``parts`` list where each entry carries ``name``,
+    ``time_signature``, ``tempo_bpm``, ``part_count``, ``measure_count``,
+    ``note_count`` and ``pickup`` (see :func:`_pickup`), plus a ``parts`` list
+    where each entry carries ``name``,
     ``measures``, ``notes`` and ``ambitus`` (``{lowest, highest,
     range_semitones}`` or ``None``). Chord symbols are excluded from note counts
     and ambitus. Raises :class:`FileNotFoundError` when the file is missing.
@@ -184,7 +185,7 @@ def parse_musicxml(path: str | Path) -> dict[str, Any]:
     if not src.exists():
         raise FileNotFoundError(f"MusicXML file not found: {src}")
 
-    score = converter.parse(str(src))
+    score = _parse_as_score(src)
 
     parts_info: list[dict[str, Any]] = []
     total_notes = 0
@@ -214,6 +215,7 @@ def parse_musicxml(path: str | Path) -> dict[str, Any]:
         "part_count": len(parts_info),
         "measure_count": max(measure_counts) if measure_counts else 0,
         "note_count": total_notes,
+        "pickup": _pickup(score),
         "parts": parts_info,
     }
 
@@ -239,7 +241,7 @@ def read_score(path: str | Path, bars: str | None = None) -> dict[str, Any]:
     if not src.exists():
         raise FileNotFoundError(f"MusicXML file not found: {src}")
 
-    score = converter.parse(str(src))
+    score = _parse_as_score(src)
     wanted = _parse_bar_spec(bars)
 
     parts_out: list[dict[str, Any]] = []
@@ -309,10 +311,15 @@ def _measure_events(measure: stream.Measure) -> list[dict[str, Any]]:
             ev["rest"] = True
         elif isinstance(el, chord.Chord):
             ev["pitches"] = [p.nameWithOctave for p in el.pitches]
-        else:
+        elif isinstance(el, note.Note):
             ev["pitches"] = [el.nameWithOctave]
-        if getattr(el, "tie", None) is not None:
-            ev["tie"] = el.tie.type
+        else:
+            # Unpitched percussion, which music21 files under notes and
+            # gives no pitch. Reported as an event without pitches.
+            ev["pitches"] = []
+        tie = getattr(el, "tie", None)
+        if tie is not None:
+            ev["tie"] = tie.type
         events.append(ev)
     return events
 
@@ -365,8 +372,7 @@ def musicxml_to_score(path: str | Path) -> ScoreSpec:
     src = Path(path)
     if not src.exists():
         raise FileNotFoundError(f"MusicXML file not found: {src}")
-    score = converter.parse(str(src))
-    return music21_to_score(score)
+    return music21_to_score(_parse_as_score(src))
 
 
 # --------------------------------------------------------------------------- #
@@ -557,6 +563,46 @@ def _ambitus(part: stream.Part) -> dict[str, Any] | None:
     }
 
 
+def _pickup(score: stream.Score) -> dict[str, Any]:
+    """Describe whether the score opens with a pickup bar.
+
+    Returns ``{present, quarters, full_bar_quarters, first_bar_number}``.
+    A first measure shorter than the prevailing time signature's bar counts as
+    a pickup when a complete bar follows it, and so does a first measure
+    numbered 0, which is how Dorico exports one. The trailing-bar condition is
+    what keeps a short fragment of a score from being read as an upbeat. This
+    matters for caret navigation: bar commands count bars, and Dorico
+    leaves a pickup out of the numbering, so a flow with one needs an extra step
+    to reach the same printed bar (see docs/protocol.md).
+    """
+    parts = list(score.parts) or [score]
+    measures = list(parts[0].getElementsByClass(stream.Measure))
+    if not measures:
+        return {"present": False, "quarters": None, "full_bar_quarters": None,
+                "first_bar_number": None}
+
+    first = measures[0]
+    signatures = parts[0].recurse().getElementsByClass(meter.TimeSignature)
+    full = _safe(lambda: float(signatures[0].barDuration.quarterLength)) if signatures else None
+    opening = _safe(lambda: float(first.duration.quarterLength))
+    number = _safe(lambda: int(first.number))
+
+    short = full is not None and opening is not None and opening < full - 1e-9
+    # Distinguish an upbeat from an incomplete score fragment: a valid pickup
+    # measure is either explicitly numbered 0 by Dorico, or is shorter than the
+    # meter and followed by at least one complete measure.
+    followed_by_full = full is not None and any(
+        (_safe(lambda m=m: float(m.duration.quarterLength)) or 0.0) >= full - 1e-9
+        for m in measures[1:]
+    )
+    return {
+        "present": bool(number == 0 or (short and followed_by_full)),
+        "quarters": opening,
+        "full_bar_quarters": full,
+        "first_bar_number": number,
+    }
+
+
 def _key_name(score: stream.Score) -> str | None:
     """Return the notated key, else music21's best analysis, else ``None``."""
     keys = list(score.recurse().getElementsByClass(key_mod.Key))
@@ -564,8 +610,10 @@ def _key_name(score: stream.Score) -> str | None:
         return keys[0].name
     sigs = list(score.recurse().getElementsByClass(key_mod.KeySignature))
     if sigs:
-        return _safe(lambda: sigs[0].asKey().name)
-    return _safe(lambda: score.analyze("key").name)
+        as_key = _safe(lambda: sigs[0].asKey())
+        return None if as_key is None else _safe(lambda: as_key.name)
+    analysed = _safe(lambda: score.analyze("key"))
+    return None if analysed is None else _safe(lambda: analysed.name)
 
 
 def _time_signature(score: stream.Score) -> str | None:
@@ -579,6 +627,27 @@ def _tempo_bpm(score: stream.Score) -> float | None:
         return None
     bpm = _safe(marks[0].getQuarterBPM)
     return round(float(bpm), 3) if bpm is not None else marks[0].number
+
+
+def _parse_as_score(src: Path) -> stream.Score:
+    """Parse a file and return a Score stream container.
+
+    ``converter.parse`` may return a bare Part for single-staff files or an
+    Opus for multi-score files. Wraps a bare Part into a Score container so
+    callers can consistently access ``.parts``, or raises ValueError with clear
+    context for unsupported types.
+    """
+    parsed = converter.parse(str(src))
+    if isinstance(parsed, stream.Score):
+        return parsed
+    if isinstance(parsed, stream.Part):
+        holder = stream.Score()
+        holder.insert(0, parsed)
+        return holder
+    raise ValueError(
+        f"{src}: expected a score or a single part, "
+        f"music21 parsed a {type(parsed).__name__}"
+    )
 
 
 def _safe(fn: Any, default: Any = None) -> Any:

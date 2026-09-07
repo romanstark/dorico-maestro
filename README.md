@@ -2,7 +2,7 @@
 
 > An AI composition and orchestration partner for **Steinberg Dorico**. Speak in natural language to write notes directly into your score, audit voice leading, analyze harmony, check instrument ranges, and manage engraving layouts, right inside your open project.
 
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/) [![Dorico 4+](https://img.shields.io/badge/Dorico-4%20%7C%205%20%7C%206-orange.svg)](https://www.steinberg.net/dorico/) [![No telemetry](https://img.shields.io/badge/telemetry-none-brightgreen.svg)](#your-music-stays-yours)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/) [![Dorico 4+](https://img.shields.io/badge/Dorico-4%20%7C%205%20%7C%206-orange.svg)](https://www.steinberg.net/dorico/) [![No telemetry](https://img.shields.io/badge/telemetry-none-brightgreen.svg)](#your-music-stays-yours) [![Glama](https://glama.ai/mcp/servers/romanstark/dorico-maestro/badges/score.svg)](https://glama.ai/mcp/servers/romanstark/dorico-maestro)
 
 ---
 
@@ -62,6 +62,7 @@ Here is what collaborating with Maestro looks like during a scoring session:
 | **🎺 Orchestration & Range** | *"Check whether the Trumpet 1 line exceeds the comfortable orchestral range"* | Validates instrument compasses and warns of difficult register extremes |
 | **🖨️ Engraving & Layout** | *"Switch to Print mode and export the full score layout as PDF"* | Navigates Dorico modes, switches views, and runs unattended PDF exports |
 | **📂 Offline Project Inspection** | *"Read the flows, players, and metadata from this .dorico file"* | Inspects `.dorico` project archives directly on disk without launching Dorico |
+| **📖 Reading Your Open Score** | *"Read the score I have open, then add a viola line that fits"* | Inspects the active flow via one-click MusicXML export to extract key, meter, bar count, and upbeat presence for exact subsequent caret operations |
 | **🔄 Enharmonic & Transpose** | *"Transpose selected notes up a whole tone and respell using sharps"* | Dispatches diatonic/chromatic transpositions and enharmonic respelling |
 
 ---
@@ -141,7 +142,7 @@ Dorico's Remote Control API is powerful, but certain tasks are intentionally res
 | Task | Why | How to do it |
 |---|---|---|
 | **Typing into Popovers** | Remote API opens popovers (Shift+D, Shift+T, etc.) but cannot type text into them | Maestro opens the popover and tells you the exact value; you press Enter, or use `write_score(method="musicxml")` |
-| **Modal Dialog Confirmation** | File and export dialogs (e.g. MusicXML export) require user confirmation | Confirm the prompt in Dorico, or use `export_pdf` for unattended PDF export |
+| **Modal Dialog Confirmation** | Dorico requires manual confirmation for file open and export dialogs | Press Enter on the export prompt once, and `read_open_score` automatically ingests the resulting MusicXML (use `export_pdf` for unattended PDF export) |
 | **Initial Connection Approval** | Dorico security model requires one-time user authorization | Click **Authorize** on the Dorico permission prompt on first run |
 | **Artistic Judgment** | AI can check rules and draft parts, but musical intent and taste belong to you | Guide the score, listen to playback, and refine the music |
 
@@ -166,7 +167,7 @@ The remaining 12 categories are currently untested.
 ### Testing & Environment
 Empirical testing was conducted against **Dorico 6.2.30 Elements** on Windows 11. Dorico restricts commands depending on product tier (SE, Elements, Pro). Commands requiring Pro (such as Lua scripting) return `kUnknownCommand` and are classified as `unavailable` rather than `broken`.
 
-Dorico Maestro exposes **29 tools** and one resource (`dorico://commands`) for complete command discovery.
+Dorico Maestro exposes **30 tools** and one resource (`dorico://commands`) for complete command discovery.
 
 ### A note to Steinberg (and Dorico Pro users)
 

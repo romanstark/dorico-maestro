@@ -5,7 +5,7 @@ the catalog.
 
 Dorico's ``keycommands.json`` (and the localised ``keycommands_<lang>.json``) is the
 authoritative list of command identifiers. This script reads it, extracts every
-command ID, and merges the result into our ``commands.yaml`` catalog:
+command ID, and merges the result into the ``commands.yaml`` catalog:
 
 * command IDs present in ``keycommands.json`` but missing from the catalog are
   appended as ``status: untested`` (namespace inferred from the id);
@@ -14,7 +14,7 @@ command ID, and merges the result into our ``commands.yaml`` catalog:
 * command IDs present in the catalog but *absent* from ``keycommands.json`` are
   reported (flagged), not removed. Three kinds of row land in that report and
   only the first is a problem: stale IDs. The canonical parameterised base
-  commands we keep that the key-command file only ships in value-baked form
+  commands retained that the key-command file only ships in value-baked form
   (e.g. ``NoteInput.Pitch``); and commands harvested from the Dorico binary
   that ``keycommands.json`` never lists, because it carries only the
   *key-bindable* subset of Dorico's command set -- ``File.Export`` and

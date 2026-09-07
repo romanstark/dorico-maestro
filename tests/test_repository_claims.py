@@ -46,7 +46,7 @@ def _counts() -> tuple[int, Counter[str], dict[str, Counter[str]]]:
 
 
 def test_every_count_in_prose_matches_the_catalog() -> None:
-    """A quota that nobody recomputed is a claim, not a measurement."""
+    """Validate documented command and category quotas against the catalog."""
     total, status, per = _counts()
     verified = status["verified"]
     offences: list[str] = []
@@ -103,7 +103,7 @@ def test_every_count_in_prose_matches_the_catalog() -> None:
 
 
 def test_the_tool_count_in_prose_matches_the_server() -> None:
-    """``27 tools`` is a number that changes whenever a tool is added."""
+    """Validate documented tool counts against registered FastMCP tools."""
     server = (ROOT / "src" / "dorico_maestro" / "server.py").read_text(encoding="utf-8")
     real = len(re.findall(r"^@mcp\.tool", server, re.MULTILINE))
     offences = []
@@ -119,11 +119,8 @@ def test_the_tool_count_in_prose_matches_the_server() -> None:
     assert not offences, "\n  ".join(offences)
 
 
-#: ``**NoteInput (125 rows, 101 verified, 1 unavailable, 23 untested):**`` --- a
-#: per-category breakdown. This form slipped past ``_CATEGORY_QUOTA``, which only
-#: understands "N of M", and two of these lines were wrong for a day: they still
-#: counted rows as ``broken`` after that status had been emptied, and one no
-#: longer summed to its own row count.
+#: Match per-category breakdowns such as
+#: ``**NoteInput (125 rows, 101 verified, 1 unavailable, 23 untested):**``.
 _CATEGORY_BREAKDOWN = re.compile(r"\*\*(\w+) \((\d+) rows?,\s*([^)]*)\)")
 
 #: The ``12 verified`` pairs inside such a breakdown.
@@ -131,7 +128,7 @@ _BREAKDOWN_PART = re.compile(r"(\d+)\s+(verified|reachable|unavailable|broken|un
 
 
 def test_every_category_breakdown_sums_and_matches_the_catalog() -> None:
-    """A breakdown has to add up to its own row count and to the catalog."""
+    """Validate that documented category breakdowns sum correctly and match."""
     _, _, per = _counts()
     offences: list[str] = []
 

@@ -53,7 +53,15 @@ def test_parse_pitch_rejects_malformed(bad: str) -> None:
 
 # ------------------------------------------------------------- pitch_commands
 def test_pitch_commands_natural() -> None:
-    assert pitch_commands("C4") == ["NoteInput.Pitch?Pitch=C&OctaveValue=4"]
+    """Ensure natural pitches emit an explicit kNatural accidental pre-step.
+
+    NoteInput.Pitch is diatonic in the active key signature; an explicit natural
+    ensures absolute pitch entry regardless of key.
+    """
+    assert pitch_commands("C4") == [
+        "NoteInput.SetAccidental?Type=kNatural",
+        "NoteInput.Pitch?Pitch=C&OctaveValue=4",
+    ]
 
 
 def test_pitch_commands_sharp_prestep() -> None:
@@ -70,7 +78,10 @@ async def test_session_lifecycle_order() -> None:
         await session.set_duration(NoteDuration.QUARTER)
         await session.pitch("F#5")
         await session.rest()
+    # The leading Exit is the toggle guard: NoteInput.Enter switches note input
+    # OFF when it is already on, so the session normalises the state first.
     assert client.sent == [
+        "NoteInput.Exit",
         "NoteInput.Enter",
         "NoteInput.NoteValue?LogDuration=kCrotchet",
         "NoteInput.SetAccidental?Type=kSharp",
@@ -86,4 +97,4 @@ async def test_session_exits_on_error() -> None:
         async with NoteInputSession(client):
             raise RuntimeError("boom")
     # Exit is guaranteed even when the body raises.
-    assert client.sent == ["NoteInput.Enter", "NoteInput.Exit"]
+    assert client.sent == ["NoteInput.Exit", "NoteInput.Enter", "NoteInput.Exit"]

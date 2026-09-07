@@ -173,9 +173,8 @@ class ScoreSpec:
 # dict -> model
 # --------------------------------------------------------------------------- #
 
-# Keys allowed at each level of a score-spec dict. Unknown keys are rejected so a
-# misplaced value (e.g. ``notes`` instead of ``events``) fails loudly instead of
-# silently producing an empty part.
+# Keys allowed at each level of a score-spec dict. Unknown keys are rejected
+# to prevent malformed properties from silently producing incomplete models.
 _PART_KEYS = frozenset({"name", "instrument", "abbreviation", "staves", "events"})
 _EVENT_KEYS = frozenset(
     {"pitch", "pitches", "kind", "duration", "dots", "tie",
@@ -1075,8 +1074,11 @@ def _m21_clef(mpart: stream.Stream) -> Clef | None:
 
 def _m21_part_name(mpart: stream.Stream, index: int) -> str:
     """Best-effort display name for a part."""
-    if mpart.partName:
-        return str(mpart.partName)
+    # partName belongs to Part rather than to Stream, and this is called with
+    # both: a Part carries the name a person chose, a plain Stream never does.
+    part_name = mpart.partName if isinstance(mpart, stream.Part) else None
+    if part_name:
+        return str(part_name)
     inst = _safe(lambda: mpart.getInstrument(returnDefault=False))
     if inst is not None and inst.instrumentName:
         return str(inst.instrumentName)

@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from dorico_maestro.spec import CommandSpec, build
 
 if TYPE_CHECKING:
-    from dorico_maestro.client import DoricoClient
+    from dorico_maestro.client import DoricoTransport
     from dorico_maestro.models import Response
     from dorico_maestro.registry import Registry
 
@@ -55,11 +55,17 @@ class Result:
 
 
 @asynccontextmanager
-async def note_input_if_needed(client: DoricoClient, spec: CommandSpec) -> AsyncIterator[None]:
-    """Enter note input if required by spec and guarantee exit on completion."""
+async def note_input_if_needed(client: DoricoTransport, spec: CommandSpec) -> AsyncIterator[None]:
+    """Enter note input if required by spec and guarantee exit on completion.
+
+    Sends ``NoteInput.Exit`` before ``NoteInput.Enter``. Enter toggles, so on an
+    already-running note input it would switch the caret off for the whole block;
+    Exit is absolute and costs nothing when note input is already off.
+    """
     if not spec.requires_note_input:
         yield
         return
+    await client.send("NoteInput.Exit")
     await client.send("NoteInput.Enter")
     try:
         yield
@@ -68,7 +74,7 @@ async def note_input_if_needed(client: DoricoClient, spec: CommandSpec) -> Async
 
 
 async def execute(
-    client: DoricoClient,
+    client: DoricoTransport,
     registry: Registry,
     cmd_id: str,
     *,
@@ -98,13 +104,13 @@ async def execute(
 
 
 # --------------------------------------------------------------------- verifiers
-async def _verify_note_added(client: DoricoClient, args: dict[str, Any]) -> bool:
+async def _verify_note_added(client: DoricoTransport, args: dict[str, Any]) -> bool:
     """Verify that a note event was created using pushed status deltas."""
     status = await client.status()
     return status.get("selectedEventType") == "kNoteEvent"
 
 
 # Name -> async post-condition checker. Referenced by ``CommandSpec.verify``.
-VERIFIERS: dict[str, Callable[[DoricoClient, dict[str, Any]], Awaitable[bool]]] = {
+VERIFIERS: dict[str, Callable[[DoricoTransport, dict[str, Any]], Awaitable[bool]]] = {
     "note_added": _verify_note_added,
 }

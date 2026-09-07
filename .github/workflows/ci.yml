@@ -27,5 +27,9 @@ jobs:
         run: pip install -e ".[dev]"
       - name: Lint (ruff)
         run: ruff check src scripts tests
+      - name: Types (pyright)
+        # Paths, includes and the interpreter all come from [tool.pyright] in
+        # pyproject.toml, so this runs the same check a contributor's editor does.
+        run: pyright
       - name: Test (pytest)
         run: pytest -q

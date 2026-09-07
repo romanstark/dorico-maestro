@@ -58,10 +58,9 @@ DURATION_TO_DORICO: dict[NoteDuration, str] = {
 class Dynamic(str, Enum):
     """Named dynamic markings.
 
-    There is deliberately no ``DYNAMIC_TO_DORICO`` map: named dynamics are a
-    Dorico popover the Remote API cannot fill (same class as key/time signatures),
-    so they travel the MusicXML path only and are dropped-with-warning on the live
-    caret path.
+    Used on the MusicXML path only. There is deliberately no ``DYNAMIC_TO_DORICO``
+    map to add: named dynamics are a Dorico popover the Remote API cannot fill, so
+    the live caret path drops them with a warning.
     """
 
     PPP = "ppp"
@@ -150,8 +149,8 @@ DURATION_QUARTER_LENGTH: dict[NoteDuration, float] = {
     NoteDuration.SIXTY_FOURTH: 0.0625,
 }
 
-# Note value -> music21 ``duration.type`` string. Note music21 spells sixteenth
-# as "16th" (not "sixteenth") while our SIXTEENTH *value* is "sixteenth".
+# Note value -> music21 duration.type string. Note that music21 spells
+# sixteenth as "16th" rather than "sixteenth".
 DURATION_TO_MUSIC21: dict[NoteDuration, str] = {
     NoteDuration.WHOLE: "whole",
     NoteDuration.HALF: "half",

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from music21 import stream
+from music21 import note, stream
 
 from dorico_maestro.models import Articulation, Clef, Dynamic, NoteDuration
 from dorico_maestro.music.score import (
@@ -24,7 +24,7 @@ from dorico_maestro.music.score import (
 
 
 def worked_example() -> dict[str, Any]:
-    """The golden fixture: two bars, two-staff piano, C major 4/4."""
+    """Return a two-bar, two-staff piano score fixture in C major 4/4."""
     return {
         "schema_version": "1.0",
         "title": "Two-Bar Sketch",
@@ -422,7 +422,9 @@ def test_score_to_music21_sharp_and_chord() -> None:
         }
     )
     notes = list(score_to_music21(spec).parts[0].recurse().notes)
-    assert notes[0].nameWithOctave == "F#5"
+    first = notes[0]
+    assert isinstance(first, note.Note)
+    assert first.nameWithOctave == "F#5"
     assert [p.nameWithOctave for p in notes[1].pitches] == ["C4", "E4", "G4"]
 
 

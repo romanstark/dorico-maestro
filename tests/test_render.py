@@ -14,8 +14,8 @@ import pytest
 from dorico_maestro.models import Response
 from dorico_maestro.music.score import ScoreSpec, score_from_dict
 from dorico_maestro.render import (
+    CARET_TO_FLOW_START,
     RenderReport,
-    bar_count,
     import_musicxml,
     plan_flow,
     render_score,
@@ -32,6 +32,10 @@ class FakeClient:
         self.sent.append(command)
         return Response(ok=True, code="kOK")
 
+    async def status(self, wait: float = 2.0) -> dict[str, Any]:
+        """No articulation left active, which is what a fresh caret reports."""
+        return {}
+
 
 class RaisingClient:
     """Records commands, but raises when a chosen command is sent."""
@@ -45,6 +49,10 @@ class RaisingClient:
             raise RuntimeError("boom")
         self.sent.append(command)
         return Response(ok=True, code="kOK")
+
+    async def status(self, wait: float = 2.0) -> dict[str, Any]:
+        """No articulation left active, which is what a fresh caret reports."""
+        return {}
 
 
 class DirtyCaretClient:
@@ -120,40 +128,61 @@ WORKED_EXAMPLE: dict[str, Any] = {
 }
 
 # The byte-identical expected output of plan_flow(WORKED_EXAMPLE)[0]. Its shape is
-# the one plan_flow's own docstring specifies: NoteInput.Enter, then for each staff
-# in system order MoveUpTop -> MoveLeftBar x bar_count -> MoveDown x staff index
-# followed by that staff's notes, and NoteInput.Exit last. Every command below
-# resolves to a row marked verified in src/dorico_maestro/commands.yaml (the
-# concrete ones directly, the NoteInput.Pitch?... ones through the parameterised
-# NoteInput.Pitch spec).
+# the one plan_flow's own docstring specifies: for each staff in system order
+# CARET_TO_FLOW_START -> MoveDown x staff index followed by that staff's notes,
+# and NoteInput.Exit last. The jump is the same length for every staff and every
+# flow, which is the point of it. Every command below resolves to a row marked
+# verified in src/dorico_maestro/commands.yaml (the concrete ones directly, the
+# NoteInput.Pitch?... ones through the parameterised NoteInput.Pitch spec).
 GOLDEN: list[str] = [
+    "NoteInput.Exit",
+    "Edit.SelectAll",
     "NoteInput.Enter",
     "NoteInput.MoveUpTop",
-    "NoteInput.MoveLeftBar",
-    "NoteInput.MoveLeftBar",
     "NoteInput.NoteValue?LogDuration=kCrotchet",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=E&OctaveValue=4",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=G&OctaveValue=4",
     "NoteInput.SetArticulation?Value=kStaccato",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=C&OctaveValue=5",
     "NoteInput.SetArticulation?Value=kStaccato",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=B&OctaveValue=4",
     "NoteInput.NoteValue?LogDuration=kMinim",
     "NoteInput.StartEndChord",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=C&OctaveValue=5",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=E&OctaveValue=5",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=G&OctaveValue=5",
     "NoteInput.StartEndChord",
     "NoteInput.RestMode",
+    "NoteInput.Exit",
+    "Edit.SelectAll",
+    "NoteInput.Enter",
     "NoteInput.MoveUpTop",
-    "NoteInput.MoveLeftBar",
-    "NoteInput.MoveLeftBar",
     "NoteInput.MoveDown",
     "NoteInput.NoteValue?LogDuration=kMinim",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=C&OctaveValue=3",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=G&OctaveValue=2",
     "NoteInput.NoteValue?LogDuration=kSemibreve",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=C&OctaveValue=2",
+    "NoteInput.Exit",
+]
+
+#: What the wire actually carries: the session's own normalising Exit and Enter,
+#: then the whole plan (it is self-contained now, so nothing is sliced off), then
+#: the session's closing Exit.
+GOLDEN_SENT: list[str] = [
+    "NoteInput.Exit",
+    "NoteInput.Enter",
+    *GOLDEN,
     "NoteInput.Exit",
 ]
 
@@ -164,9 +193,10 @@ def _worked_spec() -> ScoreSpec:
 
 # ---------------------------------------------------------------- plan_flow
 def test_plan_flow_matches_golden_sequence() -> None:
+    """Verify that plan_flow generates the expected golden command sequence."""
     commands, _warnings = plan_flow(_worked_spec())
     assert commands == GOLDEN
-    assert len(commands) == 28
+    assert len(commands) == len(GOLDEN)
 
 
 def test_plan_flow_warns_dropped_dynamic() -> None:
@@ -218,7 +248,8 @@ def test_plan_staff_emits_cyclenumdots_for_dotted_note() -> None:
     commands, _warnings = plan_flow(spec)
     nv = commands.index("NoteInput.NoteValue?LogDuration=kCrotchet")
     assert commands[nv + 1] == "NoteInput.CycleNumDots"
-    assert commands[nv + 2] == "NoteInput.Pitch?Pitch=C&OctaveValue=5"
+    assert commands[nv + 2] == "NoteInput.SetAccidental?Type=kNatural"
+    assert commands[nv + 3] == "NoteInput.Pitch?Pitch=C&OctaveValue=5"
     assert commands.count("NoteInput.CycleNumDots") == 1
 
 
@@ -305,8 +336,12 @@ def test_articulation_toggles_on_before_and_off_after_note() -> None:
     assert commands.count(acc) == 2  # on before C5, off before D5
     ci = commands.index("NoteInput.Pitch?Pitch=C&OctaveValue=5")
     di = commands.index("NoteInput.Pitch?Pitch=D&OctaveValue=5")
-    assert commands[ci - 1] == acc  # toggled ON right before the accented note
-    assert commands[di - 1] == acc  # toggled OFF right before the plain note
+    # Only the accidental pre-step separates the toggle from its note, so assert
+    # the order rather than a fixed offset.
+    assert commands[ci - 2] == acc  # toggled ON before the accented note
+    assert "SetAccidental" in commands[ci - 1]
+    assert commands[di - 2] == acc  # toggled OFF before the plain note
+    assert "SetAccidental" in commands[di - 1]
 
 
 def test_same_articulation_is_not_retoggled_between_notes() -> None:
@@ -331,25 +366,13 @@ def test_same_articulation_is_not_retoggled_between_notes() -> None:
     assert commands.count("NoteInput.SetArticulation?Value=kAccent") == 2
 
 
-# ----------------------------------------------------------------- bar_count
-def test_bar_count_two_bars() -> None:
-    spec = _worked_spec()
-    assert bar_count(spec.parts[0], 4.0) == 2
-
-
-def test_bar_count_rejects_nonpositive_bar_length() -> None:
-    spec = _worked_spec()
-    with pytest.raises(ValueError):
-        bar_count(spec.parts[0], 0.0)
-
-
 # --------------------------------------------------------------- render_score
 async def test_render_score_sends_exactly_plan_flow() -> None:
     spec = _worked_spec()
     client = FakeClient()
     report = await render_score(client, spec)
 
-    assert client.sent == GOLDEN
+    assert client.sent == GOLDEN_SENT
     assert isinstance(report, RenderReport)
     assert report.ok
     assert report.commands_planned == len(GOLDEN)
@@ -438,7 +461,14 @@ async def test_multipart_spec_is_flagged_experimental() -> None:
     client = FakeClient()
     report = await render_score(client, spec)
     assert report.experimental is True
-    assert client.sent == plan_flow(spec)[0]
+    # The session brackets the plan with its own Exit/Enter and closing Exit;
+    # in between, the plan goes out verbatim.
+    assert client.sent == [
+        "NoteInput.Exit",
+        "NoteInput.Enter",
+        *plan_flow(spec)[0],
+        "NoteInput.Exit",
+    ]
 
 
 # ------------------------------------------------------------- import_musicxml
@@ -510,3 +540,27 @@ async def test_import_musicxml_accepts_spaces_in_path(tmp_path: Any) -> None:
     assert result["attempted"] is True
     assert len(client.sent) == 1
     assert " " in client.sent[0]  # the space goes on the wire raw
+
+
+async def test_every_staff_is_positioned_by_the_same_jump_whatever_its_length() -> None:
+    """Verify that staff positioning does not depend on how much was written.
+
+    Sizing the move from the music was the old fault: a rewind long enough for a
+    short part left a longer one starting mid-score. The jump to the flow start
+    is a fixed sequence, so a four-bar part and a one-bar part cost the same.
+    """
+    spec = score_from_dict(
+        {
+            "time": "4/4",
+            "parts": [
+                {"name": "Long", "events": [{"pitch": "C4", "duration": "whole"}] * 4},
+                {"name": "Short", "events": [{"pitch": "G4", "duration": "whole"}]},
+            ],
+        }
+    )
+    commands, _ = plan_flow(spec)
+    starts = [i for i, c in enumerate(commands) if c == "Edit.SelectAll"]
+    assert len(starts) == 2
+    for i in starts:
+        assert tuple(commands[i - 1 : i + 3]) == CARET_TO_FLOW_START
+    assert "NoteInput.MoveLeftBar" not in commands

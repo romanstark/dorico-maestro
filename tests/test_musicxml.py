@@ -10,7 +10,9 @@ import re
 from pathlib import Path
 
 import pytest
+from music21 import meter, note, stream
 
+from dorico_maestro.music import musicxml
 from dorico_maestro.music.musicxml import (
     generate_musicxml,
     musicxml_to_score,
@@ -234,7 +236,7 @@ def test_read_score_missing_file_raises(tmp_path: Path) -> None:
 
 # ------------------------------------------------- who the file says wrote it
 def _composer_in(path: Path) -> str | None:
-    """The ``<creator type="composer">`` value in a written file, or None."""
+    """Return creator composer text from MusicXML file if present."""
     found = re.search(
         r'<creator type="composer">([^<]*)</creator>', path.read_text(encoding="utf-8")
     )
@@ -262,7 +264,7 @@ def test_music21_does_not_sign_the_file_as_the_composer(tmp_path: Path) -> None:
 
 
 def test_a_named_composer_still_reaches_the_file(tmp_path: Path) -> None:
-    """Blanking the default must not blank a real name."""
+    """Verify that explicit composer names are preserved in MusicXML."""
     out = tmp_path / "signed.musicxml"
     generate_musicxml(["D4"], str(out), composer="Roman Stark", title="Sketch")
     assert _composer_in(out) == "Roman Stark"
@@ -275,3 +277,54 @@ def test_a_named_composer_still_reaches_the_file(tmp_path: Path) -> None:
     out2 = tmp_path / "signed_spec.musicxml"
     score_to_musicxml(spec, str(out2))
     assert _composer_in(out2) == "Roman Stark"
+
+
+# --------------------------------------------------------------- pickup bars
+def _part_with_first_measure(quarters: float, number: int) -> stream.Score:
+    """Create a 6/4 score fixture whose opening measure lasts specified quarters."""
+    part = stream.Part()
+    opening = stream.Measure(number=number)
+    opening.append(meter.TimeSignature("6/4"))
+    opening.append(note.Note("C4", quarterLength=quarters))
+    full = stream.Measure(number=number + 1)
+    full.append(note.Note("D4", quarterLength=6.0))
+    part.append(opening)
+    part.append(full)
+    score = stream.Score()
+    score.append(part)
+    return score
+
+
+def test_a_short_opening_measure_is_reported_as_a_pickup() -> None:
+    """Identify an incomplete first measure as a pickup bar."""
+    found = musicxml._pickup(_part_with_first_measure(1.0, 0))
+    assert found["present"] is True
+    assert found["quarters"] == 1.0
+    assert found["full_bar_quarters"] == 6.0
+    assert found["first_bar_number"] == 0
+
+
+def test_a_full_opening_measure_is_not_a_pickup() -> None:
+    """Identify a complete first measure as a regular bar rather than a pickup."""
+    found = musicxml._pickup(_part_with_first_measure(6.0, 1))
+    assert found["present"] is False
+    assert found["first_bar_number"] == 1
+
+
+def test_parse_musicxml_carries_the_pickup_finding(tmp_path: Path) -> None:
+    """Verify that parse_musicxml includes pickup metadata in summary."""
+    out = generate_musicxml(["C4", "D4", "E4", "F4"], tmp_path / "plain.musicxml")
+    summary = parse_musicxml(out)
+    assert summary["pickup"]["present"] is False
+
+
+def test_a_lone_short_measure_is_a_fragment_not_a_pickup() -> None:
+    """Verify that a single short measure without following bars is not a pickup."""
+    part = stream.Part()
+    only = stream.Measure(number=1)
+    only.append(meter.TimeSignature("4/4"))
+    only.append(note.Note("C4", quarterLength=3.0))
+    part.append(only)
+    score = stream.Score()
+    score.append(part)
+    assert musicxml._pickup(score)["present"] is False

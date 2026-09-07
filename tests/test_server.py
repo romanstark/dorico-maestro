@@ -130,9 +130,13 @@ async def test_add_notes_bad_duration(fake: FakeClient) -> None:
 async def test_add_notes_sequence(fake: FakeClient) -> None:
     result = await server.add_notes(["C4", "F#5"], duration="quarter")
     assert result["success"] is True
+    # The leading Exit is the toggle guard: NoteInput.Enter switches note input
+    # OFF when it is already on, so the session normalises the state first.
     assert fake.sent == [
+        "NoteInput.Exit",
         "NoteInput.Enter",
         "NoteInput.NoteValue?LogDuration=kCrotchet",
+        "NoteInput.SetAccidental?Type=kNatural",
         "NoteInput.Pitch?Pitch=C&OctaveValue=4",
         "NoteInput.SetAccidental?Type=kSharp",
         "NoteInput.Pitch?Pitch=F&OctaveValue=5",
@@ -179,12 +183,7 @@ def test_commands_filtered_by_status() -> None:
 
 
 def test_a_status_with_no_rows_still_answers_cleanly() -> None:
-    """``broken`` is defined and currently empty.
-
-    A refusal on a licence-gated edition is ``unavailable``, not a defect, so no
-    row claims ``broken`` today. The filter must still answer with a well-formed
-    payload rather than an error or a missing key.
-    """
+    """Return an empty response when filtering by a status with zero rows."""
     payload = json.loads(server.commands_filtered("broken"))
     assert payload["filter"] == {"status": "broken"}
     assert payload["count"] == 0
@@ -217,7 +216,10 @@ async def test_add_rest_sequence(fake: FakeClient) -> None:
     result = await server.add_rest("half")
     assert result["success"] is True
     assert result["duration"] == "half"
+    # The leading Exit is the toggle guard: NoteInput.Enter switches note input
+    # OFF when it is already on, so the session normalises the state first.
     assert fake.sent == [
+        "NoteInput.Exit",
         "NoteInput.Enter",
         "NoteInput.NoteValue?LogDuration=kMinim",
         "NoteInput.RestMode",
@@ -275,7 +277,7 @@ async def test_insert_mode_says_so_rather_than_staying_silent(monkeypatch: Any) 
 
 
 async def test_a_rest_reports_the_mode_too(monkeypatch: Any) -> None:
-    """A rest displaces exactly as a note does."""
+    """Verify that add_rest returns the active note input mode."""
     client = FakeClient(status={"noteInputMode": "kOverwrite"})
     monkeypatch.setattr(server, "_client_instance", lambda: client)
     result = await server.add_rest(duration="quarter")

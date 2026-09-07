@@ -57,7 +57,7 @@ def _says_nothing_about_its_contents(schema: dict[str, Any], defs: dict[str, Any
 
 
 def test_no_tool_argument_declares_a_container_without_a_shape() -> None:
-    """Every nested argument names its fields and their types, or is exempt on record."""
+    """Verify all nested tool arguments declare explicit types or exemptions."""
     offenders: list[str] = []
     for tool in _tools():
         schema = tool.inputSchema
@@ -77,7 +77,7 @@ def test_no_tool_argument_declares_a_container_without_a_shape() -> None:
 
 
 def test_the_exemption_list_stays_a_list_of_real_arguments() -> None:
-    """An exemption for an argument that no longer exists hides a real gap."""
+    """Verify that TYPELESS_BY_DESIGN contains only existing arguments."""
     known = {
         (tool.name, name)
         for tool in _tools()
@@ -87,12 +87,63 @@ def test_the_exemption_list_stays_a_list_of_real_arguments() -> None:
     assert not stale, f"TYPELESS_BY_DESIGN names arguments that are gone: {stale}"
 
 
-def test_the_score_shape_reaches_the_client_through_every_tool_that_takes_one() -> None:
-    """Five tools take a score, and the shape has to travel with each of them.
+def test_every_published_argument_says_what_it_means() -> None:
+    """Verify that all published tool arguments define a description.
 
-    ``$defs`` and ``$ref`` are only useful if both halves arrive together, so this
-    resolves the reference the way a client has to.
+    Positional or bespoke arguments must carry clear descriptions to avoid
+    ambiguity in units or indexing conventions.
     """
+    offenders: list[str] = []
+    for tool in _tools():
+        for name, prop in (tool.inputSchema.get("properties") or {}).items():
+            if not prop.get("description"):
+                offenders.append(f"{tool.name}.{name}")
+    assert not offenders, (
+        "these arguments reach a client with a type but no meaning:\n  "
+        + "\n  ".join(offenders)
+        + "\nAnnotate the parameter with Field(description=...), or reuse one of "
+          "the shared annotations in dorico_maestro.toolargs."
+    )
+
+
+def test_every_tool_declares_what_it_does_to_the_project() -> None:
+    """Verify that every tool publishes MCP behavioral annotations.
+
+    Tool annotations like destructiveHint and readOnlyHint allow clients to
+    determine action safety programmatically without parsing documentation.
+    """
+    missing = [tool.name for tool in _tools() if tool.annotations is None]
+    assert not missing, (
+        "these tools publish no annotations:\n  "
+        + "\n  ".join(missing)
+        + "\nPass one of READS, SETS, ADDS or DESTROYS to @mcp.tool()."
+    )
+
+
+def test_no_tool_invites_a_retry_it_cannot_survive() -> None:
+    """Verify that idempotent hints do not conflict with mutating actions.
+
+    Dorico's kOK status indicates command acceptance rather than completed UI
+    execution, so tools performing mutations must not declare idempotency.
+    """
+    offenders: list[str] = []
+    for tool in _tools():
+        hints = tool.annotations
+        if hints is None:
+            continue  # covered by its own test
+        if hints.destructiveHint and hints.idempotentHint:
+            offenders.append(f"{tool.name} is destructive and claims to be idempotent")
+        if hints.readOnlyHint and hints.destructiveHint:
+            offenders.append(f"{tool.name} claims to read only and to destroy at once")
+        if hints.readOnlyHint and not hints.idempotentHint:
+            offenders.append(f"{tool.name} reads but declines to be called twice")
+    assert not offenders, (
+        "annotations that contradict themselves:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_the_score_shape_reaches_the_client_through_every_tool_that_takes_one() -> None:
+    """Verify that ScoreIn schemas and definitions propagate to all score tools."""
     for name in (
         "write_score",
         "render_to_dorico",
@@ -111,12 +162,7 @@ def test_the_score_shape_reaches_the_client_through_every_tool_that_takes_one() 
 
 
 def test_the_allowed_enum_values_are_visible_in_the_schema() -> None:
-    """A client that can see the vocabulary does not have to guess at it.
-
-    The enum-valued fields are typed str on purpose: score_from_dict
-    owns validation and its error message identifies valid values. The
-    vocabulary is documented in field descriptions.
-    """
+    """Verify that permitted enum values are documented in field descriptions."""
     tool = next(t for t in _tools() if t.name == "write_score")
     defs = tool.inputSchema["$defs"]
     assert "quarter" in defs["EventIn"]["properties"]["duration"]["description"]
@@ -124,7 +170,7 @@ def test_the_allowed_enum_values_are_visible_in_the_schema() -> None:
 
 
 def test_the_models_declare_every_key_the_loader_accepts() -> None:
-    """Two lists of allowed keys that can drift apart are one list too many."""
+    """Verify that model fields match the allowed keys in score parsing."""
     from dorico_maestro.music.score import _EVENT_KEYS, _PART_KEYS
 
     assert set(EventIn.model_fields) == set(_EVENT_KEYS), (
@@ -140,12 +186,10 @@ def test_the_models_declare_every_key_the_loader_accepts() -> None:
 
 
 def test_an_omitted_field_stays_omitted_instead_of_becoming_null() -> None:
-    """This is the property that makes the models safe to add at all.
+    """Verify that unset optional fields are omitted rather than serialized as null.
 
-    Every field on these models is optional with a None default. A dump that
-    kept unset fields would hand score_from_dict an event asking for
-    duration: null (which is rejected) where the same event used to take
-    the default. exclude_unset ensures unset fields are not emitted.
+    Fields default to None. Serializing unset fields as null would cause
+    score_from_dict to reject inputs that should receive default values.
     """
     model = ScoreIn.model_validate(
         {"parts": [{"name": "Sopran", "events": [{"pitches": ["C4"]}]}]}

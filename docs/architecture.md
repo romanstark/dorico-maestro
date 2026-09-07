@@ -83,11 +83,11 @@ Category status distribution across the 348 catalog rows:
 
 ## MCP Interface (`server.py`)
 
-The server exposes 29 tools and the `dorico://commands` resource:
+The server exposes 30 tools and the `dorico://commands` resource:
 
 1. **Connection and State:** `connect_to_dorico`, `get_status`, `read_selection`.
 2. **Single-Command & Caret Tools:** `add_notes`, `add_rest`, `transpose`, `set_key_signature`, `set_time_signature`, `navigate`, `goto_bar`, `open_popover`, `playback`, `switch_mode`, `save`, `export_pdf`.
-3. **Composition & File Tools:** `write_score`, `render_to_dorico`, `score_schema`, `export_musicxml`, `import_musicxml`, `read_score`, `read_project_info`.
+3. **Composition & File Tools:** `write_score`, `render_to_dorico`, `score_schema`, `export_musicxml`, `import_musicxml`, `read_score`, `read_open_score`, `read_project_info`.
 4. **Offline Theory Tools:** `analyze_harmony`, `check_voice_leading`, `suggest_next_chord`, `instrument_range`, `check_counterpoint`.
 5. **Discovery & Generic Dispatch:** `search_commands`, `run_command`, and `dorico://commands` resource.
 

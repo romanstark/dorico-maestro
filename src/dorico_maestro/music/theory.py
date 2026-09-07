@@ -181,8 +181,8 @@ def note_in_range(instrument: str, pitch: str) -> bool:
 
     Uses a built-in table of common concert-instrument and voice ranges (with
     aliases like ``"french horn"`` -> horn, ``"cello"`` -> violoncello), falling
-    back to music21's instrument metadata. Ranges are sounding pitch and
-    deliberately practical rather than record-setting extremes.
+    back to music21's instrument metadata. Ranges reflect practical orchestral
+    sounding pitch standards.
 
     Raises :class:`ValueError` for an unknown instrument or an unparseable pitch.
 
@@ -263,8 +263,8 @@ def roman_numeral_analysis(
     inversion figure (``""``/``None`` in root position) and ``function`` is one of
     ``tonic|subdominant|dominant|other``. Unnameable sonorities keep ``roman``
     ``None`` and never raise. An unparseable ``key`` (e.g. the German ``"H minor"``)
-    is tolerated too: the verticals are still returned with ``roman`` ``None``
-    rather than propagating a :class:`ValueError` up through the MCP tool.
+    is tolerated too: the verticals are returned with ``roman`` set to ``None``
+    when key parsing fails.
     """
     parsed = _safe(lambda: parse_key(key))
     items: list[dict[str, Any]] = []

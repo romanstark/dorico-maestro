@@ -96,14 +96,30 @@ Catalog status distribution: 190 verified, 23 reachable, 4 unavailable, 0 broken
 ## 8. Technical Findings & Workarounds
 
 - **PDF and MusicXML Export:**
-  `Print.ExportCurrentLayoutAsPDF` executes unattended without opening a dialog and writes a PDF adjacent to the project file *(tested against Dorico Elements 6.2.30)*.
-  `File.Export?FilterID=MusicXMLExportFilter` opens the MusicXML export dialog requiring user interaction.
+  `Print.ExportCurrentLayoutAsPDF` executes unattended without opening a dialog and writes a PDF adjacent to the project file *(Dorico Elements 6.2.30)*.
+  `File.Export?FilterID=MusicXMLExportFilter` opens the native MusicXML export modal dialog, which requires user confirmation:
+  1. Passing `File=<path>` (as accepted by `File.Open`) is ignored by the export filter; Dorico displays the modal save prompt with its default directory.
+  2. `Dorico6.exe` provides no CLI export switch or background export argument.
+  3. The `.dorico` ZIP archive format stores project configuration and engraving rules in `score.xml` and `scorelibrary.xml`, but does not contain a raw parseable notation stream.
+  These constraints establish the export confirmation dialog as a protocol boundary in the Remote API *(Dorico Elements 6.2.30)*. Consequently, full-score inspection (`read_open_score`) requires confirming the export dialog once and subsequently parses the resulting MusicXML.
 - **MusicXML Import:**
-  `File.Open?File=<path>&FilterID=MusicXMLImportFilter` successfully imports a MusicXML file as a new flow *(tested against Dorico Elements 6.2.30)*. Paths must use forward slashes and avoid URI encoding.
+  `File.Open?File=<path>&FilterID=MusicXMLImportFilter` imports a MusicXML file as a new flow *(Dorico Elements 6.2.30)*. Paths must use forward slashes without URL encoding.
 - **Modal Dialog Detection:**
-  While a dialog is active, incoming commands return `kOK` but do not alter score state.
+  While a modal dialog is open in Dorico, incoming commands return `kOK` but do not mutate the score *(Dorico Elements 6.2.30)*.
+- **Diatonic Interpretation of `NoteInput.Pitch`:**
+  Dorico interprets pitch letters diatonically relative to the prevailing key signature; unadorned pitch letters automatically adopt key-signature accidentals (for example, in A-flat major, letters D, E, A, and B are flattened). Because Remote API responses do not report implicit accidentals, `session.pitch_commands` prefixes every note with an explicit `NoteInput.SetAccidental` (`kNatural` for unaltered pitches) to enforce absolute pitch spelling. Dorico automatically suppresses redundant natural signs in engraving, rendering naturals only where required by the key signature *(Dorico Elements 6.2.30)*.
+- **Selection-Based Caret Placement (`NoteInput.Enter`):**
+  Entering note input places the caret at the start of the active selection. Dispatching `NoteInput.Exit` -> `Edit.SelectAll` -> `NoteInput.Enter` reliably positions the caret at bar 1 of the top staff in three commands regardless of flow length *(Dorico Elements 6.2.30)*. The initial `Exit` ensures deterministic execution because `Enter` toggles note-input mode. This replaces bar-by-bar rewinding and functions uniformly across scores of any measure count.
+- **Caret Position on Note Input Re-Entry:**
+  Re-entering note input does not restore prior caret coordinates. When no selection is active, `NoteInput.Exit` followed by `NoteInput.Enter` reactivates note input, but caret placement defaults to the current visible viewport boundary rather than retaining earlier coordinates *(Dorico Elements 6.2.30)*. Consequently, `NoteInputSession` manages input state only; explicit bar navigation must be dispatched when a target measure is required.
+- **Command Throughput and Delay Independence:**
+  Dorico's Remote API reliably processes consecutive commands over the WebSocket connection without dropped packets or required inter-command delays *(Dorico Elements 6.2.30)*. Perceived positioning discrepancies stem from viewport-relative caret placement upon re-entry rather than transmission loss. The transport client therefore dispatches commands without artificial throttling.
+- **`NoteInput.Enter` Toggle Behavior:**
+  Sending `NoteInput.Enter` while note input is already active toggles note input off. `NoteInput.Exit` is idempotent and safe to send when note input is inactive. Sending `Exit` before `Enter` ensures a clean, active note-input state *(Dorico Elements 6.2.30)*.
+- **Pickup Bar Numbering:**
+  Dorico does not number an opening pickup measure as bar 1. Step-wise bar navigation from flow start must account for pickup presence to align with printed measure numbers. Nothing in the pushed status reveals a pickup, so it has to be told rather than detected *(Dorico Elements 6.2.30)*. `goto_bar` and `open_popover` accept a `pickup` flag, and `read_open_score` reports whether an upbeat measure is present.
 - **Caret Dead-Reckoning:**
-  Because Dorico does not expose caret coordinates, `goto_bar` deterministically repositions the caret by moving to bar 1 and stepping forward (`NoteInput.MoveRightBar`, `NoteInput.MoveDown`, and `NoteInput.MoveRight`).
+  Because Dorico does not expose caret coordinates via the Remote Control API, `goto_bar` deterministically repositions the caret: it jumps to the flow start with the sequence above, then steps forward (`NoteInput.MoveRightBar`, `NoteInput.MoveDown`, and `NoteInput.MoveRight`). The jump costs the same four commands at any distance, so no caller has to know how long the flow is and there is no length beyond which positioning degrades. Whether `MoveRightBar` clamps at the end of the flow the way `MoveLeftBar` clamps at its start has not been established.
 - **Dynamics and Articulations:**
   `EventEdit.*` commands operate only on existing selections. Articulations are applied via `NoteInput.SetArticulation?Value=...`. Dynamics are entered by opening the dynamic popover (`NoteInput.CreateDynamic`).
 

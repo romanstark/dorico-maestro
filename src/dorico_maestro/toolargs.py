@@ -12,16 +12,28 @@ remains encapsulated in `dorico_maestro.music.score`.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from enum import Enum
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from dorico_maestro.models import Articulation, Clef, Dynamic, NoteDuration
 
-__all__ = ["EventIn", "PartIn", "ScoreIn", "StaffIn", "VoiceIn", "score_dict"]
+__all__ = [
+    "BarArg",
+    "DurationArg",
+    "EventIn",
+    "PartIn",
+    "ScoreArg",
+    "ScoreIn",
+    "StaffArg",
+    "StaffIn",
+    "VoiceIn",
+    "score_dict",
+]
 
 
-def _values(enum: type) -> str:
+def _values(enum: type[Enum]) -> str:
     """Return enum values as a comma-separated string for field descriptions."""
     return ", ".join(member.value for member in enum)
 
@@ -104,6 +116,73 @@ class ScoreIn(BaseModel):
     key: str | None = Field(default=None, description="e.g. 'C major', 'd minor', 'Bb major'.")
     time: str | None = Field(default=None, description="e.g. '4/4', '3/4', '6/8'.")
     tempo: float | None = Field(default=None, description="Quarter-note BPM.")
+
+
+# --------------------------------------------------------------------------- #
+# Shared parameter annotations.
+# --------------------------------------------------------------------------- #
+# A description on the parameter reaches the client as
+# ``inputSchema.properties.<name>.description``, which is where it looks for the
+# units and the counting base before it reads any prose. The nested models above
+# already carry theirs; these are the top-level arguments the tools share.
+#
+# Every enum-like argument in the server is normalised with ``.lower()``, so the
+# accepted values are listed in prose rather than declared as a Literal. Narrowing
+# the type would refuse "Quarter" and "Up", which the server accepts on purpose.
+
+#: The ScoreSpec payload, shared by every tool that takes a whole score.
+ScoreArg = Annotated[
+    ScoreIn,
+    Field(
+        description=(
+            "The score to work on, as a ScoreSpec object: metadata, parts, and the "
+            "events inside them. Call score_schema first for the exact shape, which "
+            "refuses unknown keys rather than ignoring them."
+        )
+    ),
+]
+
+#: A bar number, which Dorico counts from 1 rather than from 0.
+BarArg = Annotated[
+    int,
+    Field(
+        description=(
+            "Bar number, counted from 1, so bar 1 is the first bar of the flow. "
+            "Not an index."
+        )
+    ),
+]
+
+#: Whether the flow opens with a pickup bar, which Dorico leaves out of the count.
+PickupArg = Annotated[
+    bool,
+    Field(
+        description=(
+            "True when the flow starts with a pickup (upbeat) bar. Dorico does not "
+            "number it as bar 1, so bar navigation lands one bar short without "
+            "this. Nothing in the API reveals a pickup, so ask the person whose "
+            "score it is, or read an exported MusicXML file with read_score."
+        )
+    ),
+]
+
+#: A staff index, which is counted from 0, unlike a bar number.
+StaffArg = Annotated[
+    int,
+    Field(
+        description=(
+            "Staff index, counted from 0, where 0 is the topmost staff in the "
+            "current layout. Counted differently from a bar number on purpose: "
+            "bars start at 1, staves at 0."
+        )
+    ),
+]
+
+#: A rhythmic duration name, matched case-insensitively against NoteDuration.
+DurationArg = Annotated[
+    str,
+    Field(description=f"Rhythmic duration, one of: {_values(NoteDuration)}. Case-insensitive.")
+]
 
 
 def score_dict(score: ScoreIn | Mapping[str, Any] | Any) -> Any:

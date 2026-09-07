@@ -46,7 +46,7 @@ SCOREINFO_XML = """<?xml version="1.0" encoding="utf-8"?>
 
 
 def _project(tmp_path: Path, xml: str | None = SCOREINFO_XML) -> Path:
-    """Write a minimal ``.dorico`` container; ``xml=None`` omits the metadata."""
+    """Create a minimal .dorico test container with optional metadata."""
     path = tmp_path / "Scaler-Chords.dorico"
     with zipfile.ZipFile(path, "w") as z:
         z.writestr("META-INF/container.xml", "<container/>")

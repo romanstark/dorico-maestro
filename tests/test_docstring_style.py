@@ -75,7 +75,7 @@ def _prose_em_dashes(text: str) -> int:
 
 
 def test_every_summary_line_is_one_short_line() -> None:
-    """PEP 257: a summary that wraps is not a summary."""
+    """Validate that every docstring summary line fits on a single line."""
     offenders: list[str] = []
     for path in _modules():
         for line, owner, text, _ in _docstrings(path):
@@ -89,7 +89,7 @@ def test_every_summary_line_is_one_short_line() -> None:
 
 
 def test_no_docstring_uses_bold_markers() -> None:
-    """Nothing renders markdown in a docstring, so bold is only noise."""
+    """Validate that no docstrings contain markdown bold markup."""
     offenders: list[str] = []
     for path in _modules():
         for line, owner, text, _ in _docstrings(path):
@@ -102,7 +102,7 @@ def test_no_docstring_uses_bold_markers() -> None:
 
 
 def test_no_docstring_chains_em_dashes_in_prose() -> None:
-    """A sentence held together by dashes wants to be two sentences."""
+    """Validate that docstrings do not chain excessive prose em-dashes."""
     offenders: list[str] = []
     for path in _modules():
         for line, owner, text, _ in _docstrings(path):
@@ -116,7 +116,7 @@ def test_no_docstring_chains_em_dashes_in_prose() -> None:
 
 
 def test_no_docstring_has_grown_into_a_design_document() -> None:
-    """Past the cap the prose belongs in docs/ with a pointer left behind."""
+    """Validate that docstrings stay within line length caps."""
     offenders: list[str] = []
     for path in _modules():
         for line, owner, text, is_module in _docstrings(path):

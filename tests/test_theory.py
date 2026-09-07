@@ -28,7 +28,7 @@ C_MAJOR_SCALE = ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"]
 
 
 def _two_voice_spec(upper: list[str], lower: list[str]) -> ScoreSpec:
-    """One part, two staves, one note-per-event voice each (for voice leading)."""
+    """Build a two-staff ScoreSpec with one voice per staff."""
     return score_from_dict(
         {
             "parts": [
@@ -45,7 +45,7 @@ def _two_voice_spec(upper: list[str], lower: list[str]) -> ScoreSpec:
 
 
 def _single_instrument_spec(instrument: str, pitches: list[str]) -> ScoreSpec:
-    """One part with an instrument and a single voice of the given pitches."""
+    """Build a single-instrument ScoreSpec with the given pitches."""
     return score_from_dict(
         {
             "parts": [

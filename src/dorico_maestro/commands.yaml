@@ -69,7 +69,7 @@
   - id: "Edit.SelectAll"
     category: Edit
     status: verified
-    doc: "Select everything in the current context."
+    doc: "Select everything in the current context. Followed by NoteInput.Enter, this positions the caret at bar 1 of the top staff regardless of flow length."
   - id: "Edit.SelectMore"
     category: Edit
     status: verified
@@ -77,7 +77,7 @@
   - id: "Edit.SelectNone"
     category: Edit
     status: verified
-    doc: "Clear the selection (deselect)."
+    doc: "Clear the selection (deselect). Returns kError when nothing is selected."
   - id: "Edit.Undo"
     category: Edit
     status: verified
@@ -447,11 +447,11 @@
   - id: "NoteInput.Enter"
     category: NoteInput
     status: verified
-    doc: "Enter note-input mode (caret on)."
+    doc: "Toggle note-input mode. Sent while note input is active, it turns the caret off (send NoteInput.Exit first when state is unknown). The caret appears at the start of the active selection, or defaults to the viewport when no selection is active."
   - id: "NoteInput.Exit"
     category: NoteInput
     status: verified
-    doc: "Exit note-input mode (caret off)."
+    doc: "Exit note-input mode (caret off). Absolute command rather than a toggle; harmless when note input is already inactive."
   - id: "NoteInput.ExtendDown"
     category: NoteInput
     status: verified
@@ -565,18 +565,21 @@
   - id: "NoteInput.MoveLeftBar"
     category: NoteInput
     status: verified
+    doc: "Move the caret back one bar. Stops at the flow start without wrapping. To position at flow start, prefer Edit.SelectAll followed by NoteInput.Enter."
   - id: "NoteInput.MoveRight"
     category: NoteInput
     status: verified
   - id: "NoteInput.MoveRightBar"
     category: NoteInput
     status: verified
+    doc: "Move the caret forward one bar. Navigation steps from flow start must account for unnumbered pickup measures."
   - id: "NoteInput.MoveUp"
     category: NoteInput
     status: verified
   - id: "NoteInput.MoveUpTop"
     category: NoteInput
     status: verified
+    doc: "Lift the caret to the topmost staff. Leaves the bar position untouched."
   - id: "NoteInput.NextVoice"
     category: NoteInput
     status: untested
@@ -1352,14 +1355,14 @@
     params:
       - {name: pitch, dorico: Pitch, kind: enum, enum: ["A", "B", "C", "D", "E", "F", "G"], required: true}
       - {name: octave, dorico: OctaveValue, kind: int, required: true}
-    doc: "Input a pitch at the caret (letter A-G in Pitch, scientific octave in OctaveValue). Accidentals are NOT a parameter here: enter them via add_notes (which emits a NoteInput.SetAccidental pre-step) or an explicit NoteInput.SetAccidental."
+    doc: "Input a pitch at the caret (letter A-G in Pitch, scientific octave in OctaveValue). The letter is entered DIATONICALLY in the flow's key, so C D E in A flat major yields C Db Eb. Prefix every note with NoteInput.SetAccidental, kNatural included, to pin an absolute pitch."
   - id: "NoteInput.SetAccidental"
     category: NoteInput
     status: verified
     requires_note_input: true
     params:
       - {name: type, dorico: Type, kind: enum, enum: ["kSharp", "kFlat", "kNatural"], required: true}
-    doc: "Set the accidental for the note being input. Values use Dorico's k-prefixed enum (kSharp/kFlat/kNatural)."
+    doc: "Set the accidental for the note being input (kSharp/kFlat/kNatural). Send it before EVERY pitch, kNatural included, or NoteInput.Pitch enters the letter diatonically in the flow's key. The accidental status field reports the last explicit value, not what is applied."
   - id: "Window.SwitchMode"
     category: Window
     status: verified

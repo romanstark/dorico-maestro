@@ -7,12 +7,14 @@ nothing; the caret path must send exactly ``render.plan_flow(spec)[0]``.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from dorico_maestro import render, server
 from dorico_maestro.models import Response
+from dorico_maestro.music import musicxml
 
 
 class FakeClient:
@@ -98,43 +100,65 @@ WORKED_EXAMPLE: dict[str, Any] = {
 
 # The exact caret sequence the caret path must emit (contract §3.5).
 GOLDEN_COMMANDS: list[str] = [
+    "NoteInput.Exit",
+    "Edit.SelectAll",
     "NoteInput.Enter",
     "NoteInput.MoveUpTop",
-    "NoteInput.MoveLeftBar",
-    "NoteInput.MoveLeftBar",
     "NoteInput.NoteValue?LogDuration=kCrotchet",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=E&OctaveValue=4",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=G&OctaveValue=4",
     "NoteInput.SetArticulation?Value=kStaccato",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=C&OctaveValue=5",
     "NoteInput.SetArticulation?Value=kStaccato",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=B&OctaveValue=4",
     "NoteInput.NoteValue?LogDuration=kMinim",
     "NoteInput.StartEndChord",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=C&OctaveValue=5",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=E&OctaveValue=5",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=G&OctaveValue=5",
     "NoteInput.StartEndChord",
     "NoteInput.RestMode",
+    "NoteInput.Exit",
+    "Edit.SelectAll",
+    "NoteInput.Enter",
     "NoteInput.MoveUpTop",
-    "NoteInput.MoveLeftBar",
-    "NoteInput.MoveLeftBar",
     "NoteInput.MoveDown",
     "NoteInput.NoteValue?LogDuration=kMinim",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=C&OctaveValue=3",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=G&OctaveValue=2",
     "NoteInput.NoteValue?LogDuration=kSemibreve",
+    "NoteInput.SetAccidental?Type=kNatural",
     "NoteInput.Pitch?Pitch=C&OctaveValue=2",
+    "NoteInput.Exit",
+]
+
+#: What the wire actually carries: the session's own normalising Exit and Enter,
+#: then the whole plan (self-contained, so nothing is sliced off), then the
+#: session's closing Exit.
+GOLDEN_SENT: list[str] = [
+    "NoteInput.Exit",
+    "NoteInput.Enter",
+    *GOLDEN_COMMANDS,
     "NoteInput.Exit",
 ]
 
 
 # ------------------------------------------------------------------- write_score
 async def test_write_score_caret_sends_golden(fake: FakeClient) -> None:
+    """Validate wire traffic for a flow rendered with known meter."""
     result = await server.write_score(WORKED_EXAMPLE)
     assert result["success"] is True
     assert result["method"] == "caret"
-    assert fake.sent == GOLDEN_COMMANDS
+    assert fake.sent == GOLDEN_SENT
 
 
 async def test_write_score_reports_analysis_and_dynamics_warning(fake: FakeClient) -> None:
@@ -188,7 +212,7 @@ async def test_render_to_dorico_dry_run_sends_nothing(fake: FakeClient) -> None:
 async def test_render_to_dorico_live_sends_golden(fake: FakeClient) -> None:
     result = await server.render_to_dorico(WORKED_EXAMPLE)
     assert result["success"] is True
-    assert fake.sent == GOLDEN_COMMANDS
+    assert fake.sent == GOLDEN_SENT
 
 
 # ------------------------------------------------------------------ export/import
@@ -278,10 +302,9 @@ async def test_goto_bar_positions_and_reports(fake: FakeClient) -> None:
     result = await server.goto_bar(3, staff=1)
     assert result["success"] is True
     assert result["caret"] == {"bar": 3, "staff": 1, "beat": 1.0}
-    # Deterministic anchor: Enter, up-top, rewind to bar 1, then advance.
-    assert fake.sent[0] == "NoteInput.Enter"
-    assert fake.sent[1] == "NoteInput.MoveUpTop"
-    assert fake.sent.count("NoteInput.MoveLeftBar") == 64
+    # Deterministic anchor: jump to the flow start, then advance from there.
+    assert tuple(fake.sent[:4]) == render.CARET_TO_FLOW_START
+    assert "NoteInput.MoveLeftBar" not in fake.sent
     assert fake.sent.count("NoteInput.MoveRightBar") == 2  # bar 3 -> 2 right moves
     assert fake.sent.count("NoteInput.MoveDown") == 1  # staff 1 -> 1 down
 
@@ -300,14 +323,16 @@ async def test_goto_bar_beat_steps_over_grid(fake: FakeClient) -> None:
     assert fake.sent.count("NoteInput.MoveRight") == 2  # two quarter steps to beat 3
 
 
-async def test_goto_bar_skips_enter_when_note_input_active(fake: FakeClient) -> None:
-    # A second NoteInput.Enter would toggle note input OFF and break the moves, so
-    # goto_bar must NOT re-enter when it is already active.
+async def test_goto_bar_enters_the_same_way_whether_or_not_input_was_active(
+    fake: FakeClient,
+) -> None:
+    # Enter toggles, so it can only be relied on after an Exit. The jump leads with
+    # one, which makes the sequence identical from either starting state and means
+    # goto_bar no longer has to read status to decide.
     fake._status = {"noteInputActive": True}
     result = await server.goto_bar(2, staff=0)
     assert result["success"] is True
-    assert "NoteInput.Enter" not in fake.sent
-    assert fake.sent[0] == "NoteInput.MoveUpTop"
+    assert tuple(fake.sent[:4]) == render.CARET_TO_FLOW_START
 
 
 async def test_read_selection_reports_properties(fake: FakeClient) -> None:
@@ -473,7 +498,7 @@ async def test_open_popover_navigates_to_bar_and_staff(fake: FakeClient) -> None
     result = await server.open_popover("tempo", bar=3, staff=1)
     assert result["success"] is True
     assert result["experimental"] is True
-    assert fake.sent[0] == "NoteInput.Enter"
+    assert tuple(fake.sent[:4]) == render.CARET_TO_FLOW_START
     assert fake.sent[-1] == "NoteInput.CreateTempo"
     assert fake.sent.count("NoteInput.MoveRightBar") == 2  # bar 3 -> two steps right
     assert fake.sent.count("NoteInput.MoveDown") == 1  # staff index 1
@@ -491,3 +516,84 @@ def test_render_module_plan_flow_matches_golden() -> None:
     spec = score_from_dict(WORKED_EXAMPLE)
     commands, _ = render.plan_flow(spec)
     assert commands == GOLDEN_COMMANDS
+
+
+async def test_goto_bar_without_pickup_counts_bar_numbers(fake: FakeClient) -> None:
+    """Move caret to target bar in standard numbered flows."""
+    result = await server.goto_bar(3, staff=0)
+    assert result["success"] is True
+    assert result["pickup"] is False
+    assert fake.sent.count("NoteInput.MoveRightBar") == 2
+    assert "pickup=True" in result["caveat"]
+
+
+async def test_goto_bar_with_pickup_takes_one_extra_step(fake: FakeClient) -> None:
+    """Account for unnumbered pickup bar when navigating to target bar."""
+    result = await server.goto_bar(3, staff=0, pickup=True)
+    assert result["success"] is True
+    assert result["pickup"] is True
+    assert fake.sent.count("NoteInput.MoveRightBar") == 3
+    # The warning about miscounting belongs only on the run that miscounts.
+    assert "pickup=True" not in result["caveat"]
+
+
+# ------------------------------------------------------- read_open_score
+async def test_read_open_score_rejects_a_path_that_is_not_a_folder(
+    fake: FakeClient, tmp_path: Path
+) -> None:
+    """Reject non-directory destination path before triggering export."""
+    result = await server.read_open_score(str(tmp_path / "nope"), trigger=False)
+    assert result["success"] is False
+    assert "not a folder" in result["error"]
+    assert fake.sent == []
+
+
+async def test_read_open_score_says_what_to_do_when_no_file_arrives(
+    fake: FakeClient, tmp_path: Path
+) -> None:
+    """Return instructions when no exported file is found in target directory."""
+    result = await server.read_open_score(str(tmp_path), trigger=False)
+    assert result["success"] is False
+    assert "trigger=False" in result["retry"]
+
+
+async def test_read_open_score_reads_the_file_already_in_the_folder(
+    fake: FakeClient, tmp_path: Path
+) -> None:
+    """Read pre-existing MusicXML file without dispatching export command."""
+    musicxml.generate_musicxml(["C4", "D4", "E4"], tmp_path / "flow.musicxml")
+    result = await server.read_open_score(str(tmp_path), trigger=False)
+    assert result["success"] is True
+    assert result["file"].endswith("flow.musicxml")
+    assert result["pickup"] is False
+    assert result["summary"]["note_count"] == 3
+    assert fake.sent == []
+
+
+async def test_read_open_score_opens_the_export_dialog_when_asked(
+    fake: FakeClient, tmp_path: Path
+) -> None:
+    """Dispatch export command to open Dorico MusicXML export dialog."""
+    musicxml.generate_musicxml(["C4"], tmp_path / "flow.musicxml")
+    result = await server.read_open_score(str(tmp_path), trigger=True, wait_seconds=0.0)
+    assert fake.sent == ["File.Export?FilterID=MusicXMLExportFilter"]
+    # The file predates the call, so nothing "appeared" and the caller is told how
+    # to finish rather than being handed a stale reading as if it were fresh.
+    assert result["success"] is False
+
+
+async def test_goto_bar_costs_the_same_at_any_distance_into_the_flow(
+    fake: FakeClient,
+) -> None:
+    """Verify that reaching bar 3 and bar 300 both jump rather than step back."""
+    await server.goto_bar(3, staff=0)
+    near = list(fake.sent)
+    fake.sent.clear()
+    await server.goto_bar(300, staff=0)
+    far = list(fake.sent)
+    for sent in (near, far):
+        assert tuple(sent[:4]) == render.CARET_TO_FLOW_START
+        assert "NoteInput.MoveLeftBar" not in sent
+    # Only the forward steps differ, which is the whole difference between them.
+    assert near.count("NoteInput.MoveRightBar") == 2
+    assert far.count("NoteInput.MoveRightBar") == 299

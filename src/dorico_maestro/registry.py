@@ -1,7 +1,7 @@
 """Load the command catalog (``commands.yaml``) into :class:`CommandSpec` objects.
 
 The catalog is the single source of truth for which Dorico commands exist, what
-parameters they take, and our integration status for each (see
+parameters they take, and integration status for each (see
 ``docs/architecture.md``). The registry loads it once and offers lookups by id
 and category plus a status tally.
 """

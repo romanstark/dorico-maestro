@@ -15,14 +15,13 @@ from typing import TYPE_CHECKING, Self
 from dorico_maestro.models import DURATION_TO_DORICO, NoteDuration
 
 if TYPE_CHECKING:
-    from dorico_maestro.client import DoricoClient
+    from dorico_maestro.client import CommandSender
 
 
 # letter (A-G) · optional single accidental (# or b) · signed octave
 _PITCH_RE = re.compile(r"^([A-Ga-g])([#b])?(-?\d+)$")
 
-# Accidental character -> Dorico's enum value. Dorico 6's keycommands.json bakes
-# the k-prefixed form (NoteInput.SetAccidental?Type=kSharp), so we match it.
+# Accidental character -> Dorico enum value matching NoteInput.SetAccidental?Type=kSharp.
 _ACCIDENTAL = {"#": "kSharp", "b": "kFlat"}
 
 
@@ -43,31 +42,45 @@ def parse_pitch(spec: str) -> tuple[str, int, str | None]:
 
 
 def pitch_commands(spec: str) -> list[str]:
-    """Command string(s) to input a single pitch, incl. an accidental pre-step.
+    """Generate command string(s) to input a single pitch with an accidental.
 
     e.g. ``"F#5" -> ["NoteInput.SetAccidental?Type=kSharp",
-    "NoteInput.Pitch?Pitch=F&OctaveValue=5"]``.
+    "NoteInput.Pitch?Pitch=F&OctaveValue=5"]``, and
+    ``"D4" -> ["NoteInput.SetAccidental?Type=kNatural",
+    "NoteInput.Pitch?Pitch=D&OctaveValue=4"]``.
+
+    Because Dorico's ``NoteInput.Pitch`` interprets pitch letters diatonically
+    according to the active key signature, each note is explicitly preceded by
+    ``NoteInput.SetAccidental`` (using ``kNatural`` for unaltered pitches) to
+    guarantee absolute pitch spelling. Dorico still suppresses the sign where the
+    key makes it redundant (Dorico Elements 6.2.30).
     """
     letter, octave, accidental = parse_pitch(spec)
-    cmds: list[str] = []
-    if accidental:
-        cmds.append(f"NoteInput.SetAccidental?Type={accidental}")
-    cmds.append(f"NoteInput.Pitch?Pitch={letter}&OctaveValue={octave}")
-    return cmds
+    return [
+        f"NoteInput.SetAccidental?Type={accidental or 'kNatural'}",
+        f"NoteInput.Pitch?Pitch={letter}&OctaveValue={octave}",
+    ]
 
 
 class NoteInputSession:
     """Async context manager wrapping Dorico's note-input caret lifecycle.
 
-    ``__aenter__`` sends ``NoteInput.Enter``. ``__aexit__`` sends
-    ``NoteInput.Exit`` (always, even on error, so the caret is never left open).
+    ``__aenter__`` sends ``NoteInput.Exit`` followed by ``NoteInput.Enter``.
+    Because ``NoteInput.Enter`` toggles note input, sending ``NoteInput.Exit``
+    first guarantees a known starting state without toggling off an active caret.
+    What it does not guarantee is a position: the caret comes back at the start of
+    the current selection, or somewhere unrelated when nothing is selected, never
+    where it stood before. Move to the bar you want inside the block
+    (Dorico Elements 6.2.30).
+    ``__aexit__`` ensures ``NoteInput.Exit`` is sent even if an exception occurs.
     Inside the ``async with`` block, set a duration then add pitches/rests.
     """
 
-    def __init__(self, client: DoricoClient) -> None:
+    def __init__(self, client: CommandSender) -> None:
         self._client = client
 
     async def __aenter__(self) -> Self:
+        await self._client.send("NoteInput.Exit")
         await self._client.send("NoteInput.Enter")
         return self
 

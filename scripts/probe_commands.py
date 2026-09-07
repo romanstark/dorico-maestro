@@ -16,12 +16,10 @@ from dorico_maestro.registry import default_registry
 
 
 def catalogued_status(cmd: str) -> str:
-    """What ``commands.yaml`` currently claims about ``cmd``.
+    """Return the catalogued status of a command.
 
-    Printed beside Dorico's own answer so the two can be compared at a glance:
-    a command the catalog calls ``untested`` that answers ``kOK`` is a row ready
-    to be flipped. A command absent from the catalog answers ``not in catalog``,
-    which is itself worth knowing -- ``run_command`` will refuse it.
+    Queries default_registry for the command status, or returns
+    'not in catalog' if the command ID is absent.
     """
     try:
         return default_registry().get(cmd).status.value

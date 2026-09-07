@@ -17,7 +17,7 @@ import platform
 import uuid
 from collections import deque
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Protocol, Self, runtime_checkable
 
 import websockets
 
@@ -33,6 +33,32 @@ ERROR_CODES = {"kError", "kUnknownCommand", "kInvalidCommand", "kFail"}
 
 class DoricoConnectionError(Exception):
     """Raised when a connection to Dorico cannot be established."""
+
+
+@runtime_checkable
+class CommandSender(Protocol):
+    """Protocol for sending asynchronous commands to Dorico.
+
+    Decouples musical sessions, executors, and file operations from the
+    concrete WebSocket client implementation.
+    """
+
+    async def send(self, command: str, timeout: float | None = None) -> Response:
+        """Send one command and wait for the reply Dorico correlates with it."""
+        ...
+
+
+@runtime_checkable
+class DoricoTransport(CommandSender, Protocol):
+    """Protocol extending CommandSender with application status inspection.
+
+    Implemented by transports that can retrieve pushed application status deltas
+    to verify command execution or inspect current caret state.
+    """
+
+    async def status(self, wait: float = 2.0) -> dict[str, Any]:
+        """Return the accumulated snapshot of the status deltas Dorico pushes."""
+        ...
 
 
 class DoricoClient:

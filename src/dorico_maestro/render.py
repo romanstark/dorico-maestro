@@ -3,7 +3,7 @@
 The input model is :class:`~dorico_maestro.music.score.ScoreSpec`. This module
 has two clearly separated halves:
 
-* A pure planner (:func:`bar_count`, :func:`plan_staff`, :func:`plan_flow`)
+* A pure planner (:func:`plan_staff`, :func:`plan_flow`)
   that turns the typed score model into an ordered list of Dorico command
   strings plus honest warnings. It touches no transport and is fully unit
   testable without a fake client.
@@ -14,8 +14,8 @@ has two clearly separated halves:
   closed, even when a send raises mid-render.
 
 The caret path uses only commands the Remote API accepts and positions the caret
-deterministically per staff (``MoveUpTop`` / ``MoveLeftBar`` / ``MoveDown``)
-rather than relying on an undo-to-empty state.
+deterministically per staff (:data:`CARET_TO_FLOW_START` / ``MoveDown``) rather
+than relying on an undo-to-empty state.
 Popover-only elements (key, time, clef, named dynamics, tempo) cannot be entered
 through the Remote API, so they are dropped with a warning here and belong on
 the MusicXML path instead. Response code kOK from Dorico confirms acceptance,
@@ -25,7 +25,6 @@ never verified effect: live reports include :data:`_KOK_CAVEAT`.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import ceil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -34,13 +33,12 @@ from dorico_maestro.models import (
     DURATION_TO_DORICO,
     Articulation,
     NoteDuration,
-    TimeSignature,
 )
-from dorico_maestro.music.score import Part, ScoreSpec, Staff
+from dorico_maestro.music.score import ScoreSpec, Staff
 from dorico_maestro.session import NoteInputSession, pitch_commands
 
 if TYPE_CHECKING:
-    from dorico_maestro.client import DoricoClient
+    from dorico_maestro.client import CommandSender, DoricoTransport
 
 # Response code kOK from Dorico indicates command acceptance by the queue,
 # not guaranteed score mutation. Verify via playback or visual inspection.
@@ -49,14 +47,23 @@ _KOK_CAVEAT = (
     "landed. Verify by playback or by looking at the score."
 )
 
-# Fallback bar length (4/4) when a spec carries no time signature. The live caret
-# cannot set the time signature, so this only drives the MoveLeftBar rewind count.
-_DEFAULT_BAR_QUARTER_LENGTH = 4.0
+#: Commands that put the caret at the start of the flow, whatever its length.
+#: NoteInput.Enter places the caret at the start of the current selection, so
+#: selecting the whole flow first makes that start the flow start. The leading
+#: Exit is what makes Enter reliable, since Enter toggles. MoveUpTop then fixes
+#: the vertical origin so a MoveDown count means the same thing every time; it
+#: never moves the caret horizontally (Dorico Elements 6.2.30).
+CARET_TO_FLOW_START: tuple[str, ...] = (
+    "NoteInput.Exit",
+    "Edit.SelectAll",
+    "NoteInput.Enter",
+    "NoteInput.MoveUpTop",
+)
 
 # Dorico's pushed-status articulation flag -> the SetArticulation value that toggles
-# it. Used to defensively clear a caret that a prior edit left dirty (see
-# _clear_caret_articulations): SetArticulation is a persistent toggle, so a leftover
-# articulation would otherwise land on every rendered note.
+# it. Used to clear active caret articulations before rendering (see
+# _clear_caret_articulations): SetArticulation is a persistent toggle, so an active
+# articulation would otherwise apply to every rendered note.
 _STATUS_ARTICULATION = {
     "articulationAccent": "kAccent",
     "articulationStaccato": "kStaccato",
@@ -90,23 +97,6 @@ class RenderReport:
 # --------------------------------------------------------------------------- #
 
 
-def bar_count(part: Part, bar_quarter_length: float) -> int:
-    """Return how many bars ``part`` spans at the given bar length.
-
-    Computed as ``ceil(longest voice / bar length)`` across every staff/voice of
-    the part, so a ragged part still rewinds far enough. ``bar_quarter_length``
-    is in quarters per bar and must be positive. Anything else raises
-    :class:`ValueError`.
-    """
-    if bar_quarter_length <= 0:
-        raise ValueError(f"bar_quarter_length must be > 0, got {bar_quarter_length}")
-    longest = 0.0
-    for staff in part.staves:
-        for voice in staff.voices:
-            longest = max(longest, voice.quarter_length)
-    return ceil(longest / bar_quarter_length)
-
-
 def plan_staff(staff: Staff, *, reemit_duration: bool = True) -> tuple[list[str], list[str]]:
     """Plan the caret commands for one staff's voice 1, left to right.
 
@@ -115,12 +105,10 @@ def plan_staff(staff: Staff, *, reemit_duration: bool = True) -> tuple[list[str]
     ``CycleNumDots``. Chords are wrapped in a ``StartEndChord`` pair. Ties
     (``Tie``) and rests (``RestMode``) are emitted.
 
-    Articulations need care. ``NoteInput.SetArticulation`` is a persistent caret
-    toggle, not a one-shot per note: an articulation stays on and lands on every
-    following note until toggled off again. So we track the active set and
-    reconcile it before each note, turning off the ones no longer wanted and
-    turning on the newly wanted ones. Whatever is still on at the end of the
-    staff is then cleared, so articulations never leak onto later notes.
+    ``NoteInput.SetArticulation`` is a persistent caret toggle rather than a
+    per-note property: an articulation remains active until toggled off. Active
+    articulations are tracked and reconciled before each note, and any active
+    articulations are cleared at the end of each staff.
 
     Named dynamics are never emitted. They are dropped with a warning (use the
     MusicXML path or open_popover). Any 2nd+ voice is skipped with an experimental
@@ -201,25 +189,20 @@ def plan_staff(staff: Staff, *, reemit_duration: bool = True) -> tuple[list[str]
 def plan_flow(spec: ScoreSpec) -> tuple[list[str], list[str]]:
     """Plan the full ordered command list for the whole flow in one session.
 
-    Returns ``(commands, warnings)``. The list is wrapped in
-    ``NoteInput.Enter`` … ``NoteInput.Exit`` and walks every staff in system
-    order. Before each staff, including the first, the caret is repositioned
-    deterministically with ``MoveUpTop`` -> ``MoveLeftBar`` × :func:`bar_count` ->
-    ``MoveDown`` × ``g`` (the global staff index). Rewinding for the first staff
-    too means the caret lands on bar 1 of the top staff on its own, so a bare
-    ``NoteInput.Enter`` on a fresh flow is enough. :func:`render_score` executes
-    exactly this list.
+    Returns ``(commands, warnings)``. The list walks every staff in system order
+    and ends with ``NoteInput.Exit``. Before each staff, including the first, the
+    caret is repositioned with :data:`CARET_TO_FLOW_START` -> ``MoveDown`` × ``g``
+    (the global staff index), which costs the same four commands whether the flow
+    is two bars long or two hundred. :func:`render_score` executes exactly this
+    list.
     """
-    commands: list[str] = ["NoteInput.Enter"]
+    commands: list[str] = []
     warnings: list[str] = []
-    bar_ql = _bar_quarter_length(spec)
 
     g = 0
     for part in spec.parts:
-        bars = bar_count(part, bar_ql)
         for staff in part.staves:
-            commands.append("NoteInput.MoveUpTop")
-            commands.extend(["NoteInput.MoveLeftBar"] * bars)
+            commands.extend(CARET_TO_FLOW_START)
             commands.extend(["NoteInput.MoveDown"] * g)
             staff_cmds, staff_warnings = plan_staff(staff, reemit_duration=True)
             commands.extend(staff_cmds)
@@ -228,16 +211,6 @@ def plan_flow(spec: ScoreSpec) -> tuple[list[str], list[str]]:
 
     commands.append("NoteInput.Exit")
     return commands, warnings
-
-
-def _bar_quarter_length(spec: ScoreSpec) -> float:
-    """Return the quarter-notes per bar for ``spec.time``, falling back to 4/4."""
-    if spec.time:
-        try:
-            return TimeSignature.parse(spec.time).bar_quarter_length
-        except ValueError:
-            pass
-    return _DEFAULT_BAR_QUARTER_LENGTH
 
 
 def _is_experimental(spec: ScoreSpec) -> bool:
@@ -255,13 +228,13 @@ def _is_experimental(spec: ScoreSpec) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-async def _clear_caret_articulations(client: DoricoClient) -> None:
+async def _clear_caret_articulations(client: DoricoTransport) -> None:
     """Toggle off any articulation the caret still has active before a render.
 
     SetArticulation is a persistent toggle, and an interrupted edit can leave
     one active. Dorico exposes this in pushed status via articulation* flags.
-    plan_staff assumes a clean initial state, so we read status and toggle off
-    only active flags.
+    plan_staff assumes a clean initial state, so active flags are read from
+    status and toggled off.
     """
     try:
         status = await client.status()
@@ -273,7 +246,10 @@ async def _clear_caret_articulations(client: DoricoClient) -> None:
 
 
 async def render_score(
-    client: DoricoClient, spec: ScoreSpec, *, dry_run: bool = False
+    client: DoricoTransport,
+    spec: ScoreSpec,
+    *,
+    dry_run: bool = False,
 ) -> RenderReport:
     """Render spec into Dorico via the live caret path.
 
@@ -294,12 +270,13 @@ async def render_score(
             experimental=experimental,
         )
 
-    # plan_flow wraps its output in Enter and Exit; NoteInputSession manages
-    # those, so only interior commands are transmitted.
-    interior = commands[1:-1]
+    # The plan is self-contained: it opens each staff with CARET_TO_FLOW_START,
+    # whose leading Exit is what makes the Enter after it reliable, and closes with
+    # Exit. So it is sent whole rather than sliced. NoteInputSession is still what
+    # guarantees the caret is closed when a send raises part way through.
     async with NoteInputSession(client):
         await _clear_caret_articulations(client)
-        for command in interior:
+        for command in commands:
             await client.send(command)
 
     return RenderReport(
@@ -313,7 +290,7 @@ async def render_score(
 
 
 async def import_musicxml(
-    client: DoricoClient, path: str | Path, *, filter_id: str = "MusicXMLImportFilter"
+    client: CommandSender, path: str | Path, *, filter_id: str = "MusicXMLImportFilter"
 ) -> dict[str, Any]:
     """Import a MusicXML file into Dorico via the Remote Control API.
 
