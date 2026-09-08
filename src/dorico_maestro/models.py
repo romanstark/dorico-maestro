@@ -199,7 +199,7 @@ class TimeSignature:
     def parse(cls, text: str) -> TimeSignature:
         """Parse ``"6/8"`` into ``TimeSignature(6, 8)``.
 
-        Both parts must be positive integers; anything else (missing slash,
+        Both parts must be positive integers. Anything else (missing slash,
         non-integer, non-positive) raises :class:`ValueError`.
         """
         parts = text.strip().split("/")

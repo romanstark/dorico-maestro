@@ -164,3 +164,25 @@ def test_every_category_breakdown_sums_and_matches_the_catalog() -> None:
     assert not offences, (
         "per-category breakdowns the catalog contradicts:\n  " + "\n  ".join(offences)
     )
+
+
+def test_the_package_version_is_stated_once_and_agrees_with_itself() -> None:
+    """Validate that pyproject.toml and dorico_maestro.__version__ agree exactly."""
+    import ast
+    import tomllib
+
+    toml_text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    declared = tomllib.loads(toml_text)["project"]["version"]
+    init_text = (ROOT / "src" / "dorico_maestro" / "__init__.py").read_text(encoding="utf-8")
+    init_ast = ast.parse(init_text)
+    module = next(
+        ast.literal_eval(node.value)
+        for node in ast.walk(init_ast)
+        if isinstance(node, ast.Assign)
+        and any(getattr(t, "id", None) == "__version__" for t in node.targets)
+    )
+    assert declared == module, (
+        f"pyproject.toml says {declared!r} and __init__.py says {module!r}. "
+        "One number, two places, and they have drifted."
+    )
+

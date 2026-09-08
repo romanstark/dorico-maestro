@@ -56,8 +56,8 @@ def validate(spec: CommandSpec, **args: object) -> None:
     if unknown:
         valid = sorted(declared)
         raise ValueError(
-            f"{spec.id}: unknown argument(s) {unknown}; "
-            f"valid parameter(s): {valid if valid else 'none'}"
+            f"{spec.id}: unknown argument(s) {unknown}. "
+            f"Valid parameter(s): {valid if valid else 'none'}"
         )
     for p in spec.params:
         if p.name not in args or args[p.name] is None:
@@ -72,7 +72,7 @@ def validate(spec: CommandSpec, **args: object) -> None:
         value = args[p.name]
         if p.kind == "enum" and p.enum is not None and str(value) not in p.enum:
             raise ValueError(
-                f"{spec.id}: {p.name}={value!r} is not a valid choice; expected one of {p.enum}"
+                f"{spec.id}: {p.name}={value!r} is not a valid choice, expected one of {p.enum}"
             )
         if p.kind == "int":
             try:

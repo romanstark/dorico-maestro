@@ -196,7 +196,7 @@ class DoricoClient:
                 ws = await asyncio.wait_for(websockets.connect(uri), 2.0)
                 await ws.close()
                 return port
-            except Exception:  # noqa: BLE001, S112 - probing ports; failures are expected
+            except Exception:  # noqa: BLE001, S112 - probing ports, failures are expected
                 continue
         return None
 

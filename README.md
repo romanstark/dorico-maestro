@@ -82,42 +82,39 @@ Dorico Maestro is built on a **robust, safety-first architecture**:
 
 ## Quick start
 
-### 1. Set up the server
-Clone the repository and install the package:
+You need Steinberg Dorico 4, 5, or 6 and [uv](https://docs.astral.sh/uv/). No repository, no virtual environment, no Python knowledge.
 
-```bash
-git clone https://github.com/romanstark/dorico-maestro.git
-cd dorico-maestro
-python -m venv .venv
-```
+### 1. Install it
 
-Activate the environment:
-- **Windows (PowerShell):** `.venv\Scripts\activate`
-- **macOS / Linux:** `source .venv/bin/activate`
-
-Install dependencies:
-```bash
-pip install -e ".[dev]"
-```
-
-Verify tests without needing Dorico:
-```bash
-pytest
+```powershell
+uv tool install git+https://github.com/romanstark/dorico-maestro.git
 ```
 
 ### 2. Connect to Dorico
-1. Open **Steinberg Dorico** (version 4, 5, or 6) and open any project. Dorico automatically listens on local WebSocket port `4560`.
+1. Open **Steinberg Dorico** and open any project. Dorico automatically listens on local WebSocket port `4560`.
 2. On first connection, Dorico will display a permission prompt (*"Do you want to allow Dorico Maestro to connect?"*). Click **Authorize**. A persistent session token is saved automatically to `%APPDATA%\dorico-maestro\session_token.json` for future sessions.
 
 ### 3. Connect your AI assistant
-Add Dorico Maestro to your MCP client configuration (e.g., Claude Desktop, Antigravity IDE, Cursor):
+Add Dorico Maestro to your MCP client configuration (Claude Desktop, Cursor, Antigravity IDE):
 
 ```json
 {
   "mcpServers": {
     "dorico-maestro": {
-      "command": "/absolute/path/to/dorico-maestro/.venv/Scripts/python.exe",
-      "args": ["-m", "dorico_maestro.server"]
+      "command": "dorico-maestro"
+    }
+  }
+}
+```
+
+To run it without installing anything permanently, let `uvx` fetch it per launch:
+
+```json
+{
+  "mcpServers": {
+    "dorico-maestro": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/romanstark/dorico-maestro.git", "dorico-maestro"]
     }
   }
 }
@@ -180,6 +177,45 @@ If anyone from Steinberg discovers this project and would like to support bringi
 ## Also producing in Ableton Live?
 
 If you also produce music in a DAW, check out **[Ableton Maestro](https://github.com/romanstark/ableton-maestro)**, an MCP server built with the same architecture for Ableton Live. Bridge your workflow between session sketching in Ableton and engraving parts in Dorico with the same AI assistant.
+
+---
+
+## Development
+
+Working on the server itself rather than composing with it:
+
+```bash
+git clone https://github.com/romanstark/dorico-maestro.git
+cd dorico-maestro
+python -m venv .venv
+```
+
+Activate the environment with `.venv\Scripts\activate` on Windows or `source .venv/bin/activate` on macOS and Linux, then install dependencies:
+
+```bash
+pip install -e ".[dev]"
+```
+
+Verify tests without needing Dorico:
+
+```bash
+pytest
+```
+
+Point your MCP client at the checkout's interpreter while you work on it:
+
+```json
+{
+  "mcpServers": {
+    "dorico-maestro": {
+      "command": "/absolute/path/to/dorico-maestro/.venv/Scripts/python.exe",
+      "args": ["-m", "dorico_maestro.server"]
+    }
+  }
+}
+```
+
+On macOS and Linux the interpreter is `.venv/bin/python` rather than `.venv/Scripts/python.exe`.
 
 ---
 

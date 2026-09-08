@@ -55,7 +55,7 @@ from dorico_maestro.toolargs import (
     score_dict,
 )
 
-logging.basicConfig(level=logging.INFO)  # Log to stderr; stdout serves MCP stdio
+logging.basicConfig(level=logging.INFO)  # Log to stderr, stdout serves MCP stdio
 
 _KOK_CAVEAT = (
     "'kOK' means Dorico accepted the command, not that the musical effect "
@@ -65,7 +65,7 @@ _KOK_CAVEAT = (
 # can_undo indicates an undo action is available. Entering note input alone pushes
 # an undo record, so this flag confirms undo availability rather than verified placement.
 _CAN_UNDO_CAVEAT = (
-    "can_undo indicates an undo action is available in Dorico; entering note input "
+    "can_undo indicates an undo action is available in Dorico. Entering note input "
     "alone sets this flag, so it does not verify whether notes were placed."
 )
 
@@ -155,9 +155,9 @@ mcp = FastMCP(
     name="dorico-maestro",
     instructions=(
         "Compose together inside Steinberg Dorico. Always connect_to_dorico() first. "
-        "Reads are selection-only; use get_status for state. 'kOK' means accepted, not "
+        "Reads are selection-only, use get_status for state. 'kOK' means accepted, not "
         "necessarily effective: verify. Discover the full command set via the "
-        "dorico://commands resource; run anything with run_command. See docs/protocol.md."
+        "dorico://commands resource, run anything with run_command. See docs/protocol.md."
     ),
 )
 
@@ -170,7 +170,7 @@ def _parse_duration(duration: str) -> NoteDuration:
 def _duration_error(duration: str) -> dict[str, Any]:
     return {
         "success": False,
-        "error": f"invalid duration {duration!r}; use one of {[d.value for d in NoteDuration]}",
+        "error": f"invalid duration {duration!r}, use one of {[d.value for d in NoteDuration]}",
     }
 
 
@@ -179,7 +179,7 @@ def _result_dict(
 ) -> dict[str, Any]:
     """Render an executor :class:`Result` as a plain ``{success, …}`` dict."""
     out: dict[str, Any] = {
-        "success": bool(result.ok) and not result.blocked,
+        "success": result.ok and not result.blocked,
         "command": result.command,
         "code": result.code,
     }
@@ -445,7 +445,7 @@ async def add_notes(
 
     ONE insertion at the current caret. For a SEQUENCE of notes or chords over
     time, use ``write_score`` / ``render_to_dorico`` with a ScoreSpec (a chord is
-    one event with >=2 pitches); repeated ``add_notes`` calls do NOT chain: each
+    one event with >=2 pitches). Repeated ``add_notes`` calls do NOT chain: each
     re-enters note input at the same spot, so successive chords stack on one beat.
 
     Returns:
@@ -457,10 +457,10 @@ async def add_notes(
         overwrite note input mode, and in it these notes replace the music already
         at the caret instead of pushing it along. The mode belongs to the
         application rather than to this call, so it is reported back and not chosen
-        here; get_status reads it beforehand.
+        here. get_status reads it beforehand.
 
         Uses :class:`NoteInputSession`, so note input is always exited even on
-        error. Success indicates command acceptance (kOK); verify note placement
+        error. Success indicates command acceptance (kOK). Verify note placement
         via get_status, playback, or score inspection. Do not read can_undo as
         that verification: entering note input alone already sets it.
     """
@@ -624,7 +624,7 @@ async def set_time_signature(
             description=(
                 "The time signature that was wanted, e.g. '4/4', '3/4' or '6/8'. "
                 "Reported back in the answer so the caller can carry it to one of "
-                "the alternatives; nothing is written from it."
+                "the alternatives. Nothing is written from it."
             )
         ),
     ] = "4/4",
@@ -666,7 +666,7 @@ async def set_key_signature(
             description=(
                 "The key that was wanted, e.g. 'G major', 'C# minor' or "
                 "'Bb major'. Reported back in the answer so the caller can carry "
-                "it to one of the alternatives; nothing is written from it."
+                "it to one of the alternatives. Nothing is written from it."
             )
         ),
     ] = "C major",
@@ -732,7 +732,7 @@ async def navigate(
 
     Note:
         Use goto_bar instead to put the caret somewhere, which is what note entry
-        needs; this tool would scroll past the bar and leave the caret behind. A
+        needs. This tool would scroll past the bar and leave the caret behind. A
         target of 'bar' says so rather than doing half the job.
     """
     t = target.lower()
@@ -755,7 +755,7 @@ async def navigate(
         result = await _run(cmd_id)
         result.setdefault(
             "note",
-            "Moves the viewport only; it does not move the caret/selection.",
+            "Moves the viewport only, it does not move the caret/selection.",
         )
         return result
     return {"success": False, "error": "target must be 'start', 'end', or 'bar'"}
@@ -797,7 +797,7 @@ async def switch_mode(
     if key not in _MODE_VALUES:
         return {
             "success": False,
-            "error": f"unknown mode {mode!r}; choose from {sorted(_MODE_ALIASES)}",
+            "error": f"unknown mode {mode!r}, choose from {sorted(_MODE_ALIASES)}",
         }
     return await _run("Window.SwitchMode", mode=key)
 
@@ -837,7 +837,7 @@ async def playback(
         vs Effect'). It makes sound, which matters if a person is in the room.
 
         Use navigate to scroll the score without playing, and goto_bar to move the
-        caret; neither of those moves the playhead.
+        caret. Neither of those moves the playhead.
     """
     a = action.lower()
     if a == "stop":
@@ -894,7 +894,7 @@ async def export_pdf(
     """Export the score to PDF unattended without opening a dialog.
 
     Writes the file next to the .dorico project, named after the layout. This is the
-    unattended path; File.Export opens a modal dialog and is not usable from here.
+    unattended path. File.Export opens a modal dialog and is not usable from here.
 
     Returns:
         Result dictionary reporting whether the command was accepted.
@@ -1064,8 +1064,8 @@ async def open_popover(
 
     where = f"at bar {bar}" if bar is not None else "at the current selection"
     return {
-        "success": bool(resp.ok),
-        "opened": bool(resp.ok),
+        "success": resp.ok,
+        "opened": resp.ok,
         "kind": k,
         "command": command_id,
         "code": resp.code,
@@ -1098,7 +1098,7 @@ async def run_command(
                 "Query parameters for the command, whose names differ per command "
                 "and are declared in the catalog rather than here. Add "
                 "{'confirm': True} to authorise a command the catalog marks "
-                "destructive; without it such a command is refused."
+                "destructive. Without it such a command is refused."
             )
         ),
     ] = None,
@@ -1243,7 +1243,7 @@ async def write_score(
             "warnings": [imported.get("note", "")],
             "caveat": _KOK_CAVEAT,
         }
-    return {"success": False, "error": f"unknown method {method!r}; use 'caret' or 'musicxml'"}
+    return {"success": False, "error": f"unknown method {method!r}, use 'caret' or 'musicxml'"}
 
 
 @mcp.tool(annotations=ADDS)
@@ -1335,7 +1335,7 @@ def export_musicxml(
         Result dictionary with the outcome and the path that was written.
 
     Note:
-        A specified path is overwritten without confirmation; omit the path to
+        A specified path is overwritten without confirmation. Omit the path to
         write to a temporary file.
 
         To get the file into Dorico afterwards, import_musicxml opens it as a new
@@ -1484,7 +1484,7 @@ async def read_open_score(
     """Read the whole open score back by way of a MusicXML export.
 
     The only route to the full contents of the score that is open. Reads over the
-    Remote API see the selection alone, so everything else here works blind; this
+    Remote API see the selection alone, so everything else here works blind. This
     is what makes bar count, key, time signature and above all a pickup bar
     knowable instead of guessed.
 
@@ -1618,7 +1618,7 @@ def analyze_harmony(score: ScoreArg) -> dict[str, Any]:
         reading of each sonority.
 
     Note:
-        Key estimation relies on pitch distribution; for short or highly chromatic
+        Key estimation relies on pitch distribution. For short or highly chromatic
         excerpts, verify the estimated tonal center before relying on Roman numerals.
 
         This answers what the harmony is. For whether the voices move well between
@@ -1696,7 +1696,7 @@ def suggest_next_chord(
 
     Note:
         Suggestions come from common-practice function, so they describe what usually
-        follows rather than what must. Nothing is written anywhere; to hear a
+        follows rather than what must. Nothing is written anywhere. To hear a
         candidate, put it in a ScoreSpec and use write_score.
 
         This takes numerals, not notes. To get numerals out of actual music, run
@@ -1783,7 +1783,7 @@ def check_counterpoint(
         Field(
             description=(
                 "Which species to check. Only 1, note against note, is "
-                "implemented; any other value is refused rather than approximated."
+                "implemented. Any other value is refused rather than approximated."
             )
         ),
     ] = 1,

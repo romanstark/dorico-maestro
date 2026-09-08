@@ -12,7 +12,7 @@ render planner) reads that one model. This module is the four-way conversion:
 
 The canonical shape is nested ``ScoreSpec -> parts -> staves -> voices ->
 events``. A flat authoring shortcut (``part.events`` whose events carry
-``staff``/``voice``) is accepted and normalised to the nested form;
+``staff``/``voice``) is accepted and normalised to the nested form.
 :func:`score_to_dict` always emits the nested form and round-trips
 (``score_from_dict(score_to_dict(spec)) == spec``).
 
@@ -199,7 +199,7 @@ def _reject_unknown_keys(raw: Mapping[str, Any], allowed: frozenset[str], path: 
         for k in unknown
     ]
     raise ScoreSpecError(
-        f"{path}: unknown key(s) {', '.join(named)}; allowed: {', '.join(sorted(allowed))}"
+        f"{path}: unknown key(s) {', '.join(named)}. Allowed: {', '.join(sorted(allowed))}"
     )
 
 
@@ -280,7 +280,7 @@ def spec_schema() -> dict[str, Any]:
             ],
         },
         "event_fields": {
-            "pitches": "list of scientific pitch names (['C4']); [] or omit = rest; 2+ = chord",
+            "pitches": "list of scientific pitch names (['C4']), [] or omit = rest, 2+ = chord",
             "pitch": "sugar for a single pitch",
             "duration": "one of the duration enum (default 'quarter')",
             "dots": "rhythmic dots 0-2 (default 0)",
@@ -300,11 +300,11 @@ def spec_schema() -> dict[str, Any]:
         },
         "rules": [
             "A part uses EITHER 'events' (flat) OR 'staves' (nested), never both.",
-            "staff is 0-based; voice is 1-based.",
+            "staff is 0-based, voice is 1-based.",
             "Unknown keys are rejected (e.g. 'notes' -> use 'events').",
             (
                 "The live caret enters pitches/durations/dots/ties/articulations/rests/"
-                "chords; key/time/clef/named-dynamics/tempo are MusicXML-path only."
+                "chords. Key/time/clef/named-dynamics/tempo are MusicXML-path only."
             ),
         ],
     }
@@ -693,7 +693,7 @@ def validate(spec: ScoreSpec) -> list[str]:
     """
     problems: list[str] = []
 
-    if str(spec.schema_version).split(".")[0] != _SCHEMA_MAJOR:
+    if spec.schema_version.split(".")[0] != _SCHEMA_MAJOR:
         problems.append(
             f"schema_version {spec.schema_version!r} has an unsupported major version"
         )
@@ -768,9 +768,9 @@ def score_to_music21(spec: ScoreSpec) -> stream.Score:
     for pindex, part in enumerate(spec.parts):
         staves = part.staves or [Staff(index=0)]
         multi = len(staves) > 1
-        staff_streams: list[stream.Stream] = []
+        staff_streams: list[stream.Part] = []
         for sidx, staff in enumerate(staves):
-            pstream: stream.Stream = stream.PartStaff() if multi else stream.Part()
+            pstream: stream.Part = stream.PartStaff() if multi else stream.Part()
             if sidx == 0:
                 pstream.partName = part.name
                 if part.abbreviation:
@@ -785,7 +785,7 @@ def score_to_music21(spec: ScoreSpec) -> stream.Score:
             if key_fields is not None:
                 pstream.insert(0, key_mod.Key(*key_fields))
             if pindex == 0 and sidx == 0 and spec.tempo:
-                pstream.insert(0, tempo.MetronomeMark(number=float(spec.tempo)))
+                pstream.insert(0, tempo.MetronomeMark(number=spec.tempo))
 
             _fill_staff(pstream, staff)
             pstream.makeMeasures(inPlace=True)
@@ -800,7 +800,7 @@ def score_to_music21(spec: ScoreSpec) -> stream.Score:
     return score
 
 
-def _fill_staff(pstream: stream.Stream, staff: Staff) -> None:
+def _fill_staff(pstream: stream.Part, staff: Staff) -> None:
     """Append a staff's events to ``pstream`` (voice streams when >1 voice)."""
     voices = staff.voices
     if len(voices) <= 1:
@@ -919,7 +919,7 @@ def _parse_key(text: str) -> tuple[str, str]:
 
     Kept local so this module never imports ``theory`` (import-graph rule).
     """
-    raw = str(text).strip()
+    raw = text.strip()
     if not raw:
         raise ScoreSpecError("key: empty key specification")
 
@@ -1003,9 +1003,9 @@ def music21_to_score(score: stream.Score) -> ScoreSpec:
     md = score.metadata
     return ScoreSpec(
         parts=parts,
-        title=_safe(lambda: md.title) if md else None,
-        composer=_safe(lambda: md.composer) if md else None,
-        lyricist=_safe(lambda: md.lyricist) if md else None,
+        title=_safe(lambda: md.title) if md is not None else None,
+        composer=_safe(lambda: md.composer) if md is not None else None,
+        lyricist=_safe(lambda: md.lyricist) if md is not None else None,
         key=_m21_key(score),
         time=_m21_time(score),
         tempo=_m21_tempo(score),
@@ -1036,7 +1036,7 @@ def _events_from_m21_part(mpart: stream.Stream) -> list[Event]:
 def _event_from_m21(obj: note.GeneralNote) -> Event:
     """Build one :class:`Event` from a music21 note/chord/rest."""
     nd = DURATION_FROM_MUSIC21.get(obj.duration.type, NoteDuration.QUARTER)
-    dots = min(int(obj.duration.dots or 0), 2)
+    dots = min(obj.duration.dots or 0, 2)
 
     if isinstance(obj, note.Rest):
         return Event(pitches=[], duration=nd, dots=dots)
@@ -1047,7 +1047,7 @@ def _event_from_m21(obj: note.GeneralNote) -> Event:
         mapped = _ARTICULATION_FROM_MUSIC21.get(type(art).__name__)
         if mapped is not None:
             arts.append(mapped)
-    tie_flag = bool(obj.tie is not None and obj.tie.type in ("start", "continue"))
+    tie_flag = obj.tie is not None and obj.tie.type in ("start", "continue")
     lyric = obj.lyric if getattr(obj, "lyric", None) else None
     return Event(
         pitches=pitches,
@@ -1097,7 +1097,7 @@ def _m21_key(score: stream.Score) -> str | None:
     """Recover a notated key/key-signature name (no analysis fallback)."""
     keys = list(score.recurse().getElementsByClass(key_mod.Key))
     if keys:
-        return str(keys[0].name)
+        return keys[0].name
     sigs = list(score.recurse().getElementsByClass(key_mod.KeySignature))
     if sigs:
         return _safe(lambda: sigs[0].asKey().name)
@@ -1107,7 +1107,7 @@ def _m21_key(score: stream.Score) -> str | None:
 def _m21_time(score: stream.Score) -> str | None:
     """Recover the first time signature as a ``"n/d"`` string."""
     sigs = list(score.recurse().getElementsByClass(meter.TimeSignature))
-    return str(sigs[0].ratioString) if sigs else None
+    return sigs[0].ratioString if sigs else None
 
 
 def _m21_tempo(score: stream.Score) -> float | None:

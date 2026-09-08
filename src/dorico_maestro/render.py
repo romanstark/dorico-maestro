@@ -51,7 +51,7 @@ _KOK_CAVEAT = (
 #: NoteInput.Enter places the caret at the start of the current selection, so
 #: selecting the whole flow first makes that start the flow start. The leading
 #: Exit is what makes Enter reliable, since Enter toggles. MoveUpTop then fixes
-#: the vertical origin so a MoveDown count means the same thing every time; it
+#: the vertical origin so a MoveDown count means the same thing every time. It
 #: never moves the caret horizontally (Dorico Elements 6.2.30).
 CARET_TO_FLOW_START: tuple[str, ...] = (
     "NoteInput.Exit",
@@ -119,8 +119,8 @@ def plan_staff(staff: Staff, *, reemit_duration: bool = True) -> tuple[list[str]
 
     if staff.clef is not None:
         warnings.append(
-            f"staff {staff.index}: clef {staff.clef.value!r} is not enterable live; "
-            "set it in Dorico or use export_musicxml"
+            f"staff {staff.index}: clef {staff.clef.value!r} is not enterable live. "
+            "Set it in Dorico or use export_musicxml"
         )
 
     voices = staff.voices
@@ -238,7 +238,7 @@ async def _clear_caret_articulations(client: DoricoTransport) -> None:
     """
     try:
         status = await client.status()
-    except Exception:  # noqa: BLE001 - a fresh caret is already clean; skip on any read error
+    except Exception:  # noqa: BLE001 - a fresh caret is already clean, skip on any read error
         return
     for flag, value in _STATUS_ARTICULATION.items():
         if status.get(flag):

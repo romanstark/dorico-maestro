@@ -244,7 +244,7 @@ def test_lyricist_round_trips_dict_and_music21() -> None:
     assert score_from_dict(score_to_dict(spec)) == spec
     # and it survives the music21 bridge both ways
     m21 = score_to_music21(spec)
-    assert m21.metadata.lyricist == "P. Poet"
+    assert m21.metadata is not None and m21.metadata.lyricist == "P. Poet"
     assert music21_to_score(m21).lyricist == "P. Poet"
 
 
@@ -390,7 +390,7 @@ def test_score_to_music21_applies_globals() -> None:
     from music21 import meter, tempo
 
     score = score_to_music21(score_from_dict(worked_example()))
-    assert score.metadata.title == "Two-Bar Sketch"
+    assert score.metadata is not None and score.metadata.title == "Two-Bar Sketch"
     keys = list(score.recurse().getElementsByClass(key_mod.Key))
     assert keys and keys[0].name == "C major"
     times = list(score.recurse().getElementsByClass(meter.TimeSignature))

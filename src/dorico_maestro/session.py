@@ -31,7 +31,7 @@ def parse_pitch(spec: str) -> tuple[str, int, str | None]:
     ``"C4" -> ("C", 4, None)``, ``"F#5" -> ("F", 5, "kSharp")``,
     ``"Bb3" -> ("B", 3, "kFlat")``. ``accidental`` is Dorico's enum value
     (``"kSharp"``/``"kFlat"``) or ``None``. Only a single accidental is
-    supported; anything else (bad letter, double accidental, missing/garbled
+    supported. Anything else (bad letter, double accidental, missing/garbled
     octave) raises :class:`ValueError` rather than being silently misparsed.
     """
     m = _PITCH_RE.match(spec.strip())

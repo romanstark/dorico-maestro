@@ -52,7 +52,7 @@ class EventIn(BaseModel):
     )
     pitch: str | None = Field(default=None, description="Sugar for a single-pitch event.")
     kind: str | None = Field(
-        default=None, description="'note', 'chord' or 'rest'; inferred if absent."
+        default=None, description="'note', 'chord' or 'rest'. Inferred if absent."
     )
     duration: str | None = Field(default=None, description=f"One of: {_values(NoteDuration)}.")
     dots: int | None = Field(default=None, description="Rhythmic dots, 0 or more.")
@@ -63,8 +63,8 @@ class EventIn(BaseModel):
     dynamic: str | None = Field(default=None, description=f"One of: {_values(Dynamic)}.")
     slur: str | None = Field(default=None, description="'start' or 'stop'.")
     lyric: str | None = Field(default=None, description="Lyric syllable for this event.")
-    staff: int | None = Field(default=None, description="0-based; must match the nesting staff.")
-    voice: int | None = Field(default=None, description="1-based; must match the nesting voice.")
+    staff: int | None = Field(default=None, description="0-based. Must match the nesting staff.")
+    voice: int | None = Field(default=None, description="1-based. Must match the nesting voice.")
 
 
 class VoiceIn(BaseModel):
@@ -74,7 +74,7 @@ class VoiceIn(BaseModel):
 
     events: list[EventIn] | None = None
     index: int | None = Field(
-        default=None, description="1-based voice number; defaults to position."
+        default=None, description="1-based voice number, defaults to position."
     )
 
 
@@ -124,7 +124,7 @@ class ScoreIn(BaseModel):
 # A description on the parameter reaches the client as
 # ``inputSchema.properties.<name>.description``, which is where it looks for the
 # units and the counting base before it reads any prose. The nested models above
-# already carry theirs; these are the top-level arguments the tools share.
+# already carry theirs. These are the top-level arguments the tools share.
 #
 # Every enum-like argument in the server is normalised with ``.lower()``, so the
 # accepted values are listed in prose rather than declared as a Literal. Narrowing

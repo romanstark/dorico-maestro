@@ -19,7 +19,7 @@ dynamics/tempo the live caret path cannot enter):
 Everything is headless: files in, files out, no ``.show()``.
 
 Importing a generated file into Dorico is a separate step handled by
-``render.import_musicxml`` (``File.Open?File=…&FilterID=MusicXMLImportFilter``; see
+``render.import_musicxml`` (``File.Open?File=…&FilterID=MusicXMLImportFilter``, see
 ``docs/protocol.md`` §8), not by this module.
 
 Note structure accepted by :func:`generate_musicxml`
@@ -150,7 +150,7 @@ def generate_musicxml(
         if key is not None:
             part.insert(0, _coerce_key(key))
         if index == 0 and tempo_bpm:
-            part.insert(0, tempo.MetronomeMark(number=float(tempo_bpm)))
+            part.insert(0, tempo.MetronomeMark(number=tempo_bpm))
 
         for i, spec in enumerate(specs):
             try:
@@ -207,8 +207,8 @@ def parse_musicxml(path: str | Path) -> dict[str, Any]:
     md = score.metadata
     return {
         "path": str(src),
-        "title": _safe(lambda: md.bestTitle) if md else None,
-        "composer": _safe(lambda: md.composer) if md else None,
+        "title": _safe(lambda: md.bestTitle) if md is not None else None,
+        "composer": _safe(lambda: md.composer) if md is not None else None,
         "key": _key_name(score),
         "time_signature": _time_signature(score),
         "tempo_bpm": _tempo_bpm(score),
@@ -259,8 +259,8 @@ def read_score(path: str | Path, bars: str | None = None) -> dict[str, Any]:
     md = score.metadata
     return {
         "path": str(src),
-        "title": _safe(lambda: md.bestTitle) if md else None,
-        "composer": _safe(lambda: md.composer) if md else None,
+        "title": _safe(lambda: md.bestTitle) if md is not None else None,
+        "composer": _safe(lambda: md.composer) if md is not None else None,
         "key": _key_name(score),
         "time_signature": _time_signature(score),
         "tempo_bpm": _tempo_bpm(score),
@@ -279,7 +279,7 @@ def _parse_bar_spec(bars: str | None) -> set[int] | None:
     if bars is None:
         return None
     wanted: set[int] = set()
-    for token in str(bars).split(","):
+    for token in bars.split(","):
         token = token.strip()
         if not token:
             continue
@@ -385,7 +385,7 @@ def _normalize_parts(
 ) -> list[tuple[str, list[Any]]]:
     """Normalise ``notes`` into an ordered list of ``(part_name, specs)``."""
     if isinstance(notes, Mapping):
-        return [(str(name), list(seq)) for name, seq in notes.items()]
+        return [(name, list(seq)) for name, seq in notes.items()]
     if isinstance(notes, (str, bytes)):
         raise TypeError("notes must be a sequence of note specs or a mapping of parts")
     return [("Melody", list(notes))]
@@ -440,7 +440,7 @@ def _build_note_object(spec: Any, default_dur: str | float) -> note.GeneralNote:
         obj = chord.Chord(pitches)
     obj.duration = _coerce_duration(dur)
     if lyric and pitches:
-        obj.lyric = str(lyric)
+        obj.lyric = lyric
     return obj
 
 
@@ -448,7 +448,7 @@ def _coerce_duration(value: Any) -> duration.Duration:
     """Coerce a number or duration name (optionally dotted) to a Duration."""
     if isinstance(value, duration.Duration):
         return value
-    if isinstance(value, bool):  # bool is an int subclass; reject explicitly
+    if isinstance(value, bool):  # bool is an int subclass, reject explicitly
         raise TypeError(f"invalid duration: {value!r}")
     if isinstance(value, (int, float)):
         return duration.Duration(quarterLength=float(value))
@@ -585,7 +585,7 @@ def _pickup(score: stream.Score) -> dict[str, Any]:
     signatures = parts[0].recurse().getElementsByClass(meter.TimeSignature)
     full = _safe(lambda: float(signatures[0].barDuration.quarterLength)) if signatures else None
     opening = _safe(lambda: float(first.duration.quarterLength))
-    number = _safe(lambda: int(first.number))
+    number = _safe(lambda: first.number)
 
     short = full is not None and opening is not None and opening < full - 1e-9
     # Distinguish an upbeat from an incomplete score fragment: a valid pickup

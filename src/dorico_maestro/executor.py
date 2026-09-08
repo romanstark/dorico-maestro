@@ -8,7 +8,7 @@ result mapping (Result), and optional post-condition verification.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -55,11 +55,13 @@ class Result:
 
 
 @asynccontextmanager
-async def note_input_if_needed(client: DoricoTransport, spec: CommandSpec) -> AsyncIterator[None]:
+async def note_input_if_needed(
+    client: DoricoTransport, spec: CommandSpec
+) -> AsyncGenerator[None, None]:
     """Enter note input if required by spec and guarantee exit on completion.
 
     Sends ``NoteInput.Exit`` before ``NoteInput.Enter``. Enter toggles, so on an
-    already-running note input it would switch the caret off for the whole block;
+    already-running note input it would switch the caret off for the whole block.
     Exit is absolute and costs nothing when note input is already off.
     """
     if not spec.requires_note_input:
@@ -89,7 +91,7 @@ async def execute(
     """
     spec = registry.get(cmd_id)
     if spec.destructive and not confirm:
-        return Result.blocked_(spec, "destructive command; pass confirm=True to run it")
+        return Result.blocked_(spec, "Destructive command. Pass confirm=True to run it.")
 
     command = build(spec, **args)
     async with note_input_if_needed(client, spec):

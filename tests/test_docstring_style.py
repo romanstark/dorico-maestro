@@ -24,7 +24,7 @@ MAX_FUNCTION_LINES = 40
 MAX_MODULE_LINES = 80
 
 #: Maximum allowed prose em-dashes per docstring.
-MAX_PROSE_EM_DASHES = 2
+MAX_PROSE_EM_DASHES = 0
 
 EM_DASH = "—"
 

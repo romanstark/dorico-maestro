@@ -84,7 +84,7 @@ def parse_key(spec: str) -> key_mod.Key:
     upper-case tonic is read as major and a lower-case tonic as minor (the usual
     convention). Raises :class:`ValueError` for anything music21 cannot parse.
     """
-    text = str(spec).strip()
+    text = spec.strip()
     if not text:
         raise ValueError("empty key specification")
 
@@ -134,7 +134,7 @@ def analyze_chord(pitches: list[str]) -> dict[str, Any]:
     if not pitches:
         raise ValueError("analyze_chord requires at least one pitch")
     try:
-        chd = chord.Chord([str(p).strip() for p in pitches])
+        chd = chord.Chord([p.strip() for p in pitches])
     except Exception as exc:
         raise ValueError(f"could not parse pitches {pitches!r}: {exc}") from exc
 
@@ -165,7 +165,6 @@ def suggest_progression(key: str, length: int = 4) -> list[str]:
     >>> suggest_progression("a minor", 4)
     ['i', 'iv', 'V', 'i']
     """
-    length = int(length)
     if length < 1:
         raise ValueError("length must be >= 1")
     parsed = parse_key(key)
@@ -193,7 +192,7 @@ def note_in_range(instrument: str, pitch: str) -> bool:
     """
     low, high = instrument_bounds(instrument)
     try:
-        target = pitch_mod.Pitch(str(pitch).strip())
+        target = pitch_mod.Pitch(pitch.strip())
     except Exception as exc:
         raise ValueError(f"invalid pitch {pitch!r}: {exc}") from exc
     return low.ps <= target.ps <= high.ps
@@ -337,8 +336,8 @@ def find_parallels(
 def check_voice_leading(spec: ScoreSpec, *, key: str | None = None) -> list[dict[str, Any]]:
     """Check every adjacent voice pair of ``spec`` for voice-leading problems.
 
-    Each staff-voice becomes a melodic line (a chord contributes its top note);
-    lines are ordered top to bottom and adjacent pairs are compared. Reports
+    Each staff-voice becomes a melodic line (a chord contributes its top note).
+    Lines are ordered top to bottom and adjacent pairs are compared. Reports
     parallel perfect fifths/octaves and hidden/direct perfects (``error``),
     voice crossing and overlap (``warning``), oversized melodic leaps
     (``error`` beyond an octave, ``warning`` for a seventh) and (when ``key`` is
@@ -381,7 +380,7 @@ def suggest_cadence(key: str, kind: str = "authentic") -> list[str]:
     """
     parsed = parse_key(key)
     table = _CADENCES_MINOR if parsed.mode == "minor" else _CADENCES_MAJOR
-    normalised = str(kind).strip().lower()
+    normalised = kind.strip().lower()
     if normalised not in table:
         raise ValueError(
             f"unknown cadence kind {kind!r} (authentic|plagal|half|deceptive)"
@@ -452,7 +451,7 @@ def check_ranges(
             for voice in staff.voices:
                 for eindex, event in enumerate(voice.events):
                     for name_of_pitch in event.pitches:
-                        pobj = _safe(lambda p=name_of_pitch: pitch_mod.Pitch(str(p).strip()))
+                        pobj = _safe(lambda p=name_of_pitch: pitch_mod.Pitch(p.strip()))
                         if pobj is None:
                             continue
                         if pobj.ps < low_ps:
@@ -487,7 +486,7 @@ def check_species_counterpoint(
 ) -> list[dict[str, Any]]:
     """Check a first-species counterpoint against a cantus firmus.
 
-    Note-against-note (first species only; any other ``species`` raises
+    Note-against-note (first species only, any other ``species`` raises
     :class:`NotImplementedError`). Enforces the classic rules: begin and end on a
     perfect consonance, only consonant verticals, no parallel/consecutive perfect
     fifths, octaves or unisons (via :func:`find_parallels`), no voice crossing and
@@ -502,8 +501,8 @@ def check_species_counterpoint(
         )
     _ = key  # reserved for later species (modal degree rules)
 
-    cf = [str(p).strip() for p in cantus_firmus]
-    cp = [str(p).strip() for p in counterpoint]
+    cf = [p.strip() for p in cantus_firmus]
+    cp = [p.strip() for p in counterpoint]
     issues: list[dict[str, Any]] = []
     if len(cf) != len(cp):
         issues.append(
@@ -687,7 +686,7 @@ def _loop_progression(length: int, minor: bool) -> list[str]:
 
 def instrument_bounds(name: str) -> tuple[pitch_mod.Pitch, pitch_mod.Pitch]:
     """Resolve an instrument name to a ``(low, high)`` pair of pitches."""
-    raw = str(name).strip()
+    raw = name.strip()
     canon = _ALIASES.get(raw.lower(), raw.lower())
     if canon in _RANGES:
         low, high = _RANGES[canon]
@@ -697,7 +696,7 @@ def instrument_bounds(name: str) -> tuple[pitch_mod.Pitch, pitch_mod.Pitch]:
     if inst is not None and inst.lowestNote is not None and inst.highestNote is not None:
         return inst.lowestNote, inst.highestNote
 
-    raise ValueError(f"unknown instrument {name!r}; no range available")
+    raise ValueError(f"unknown instrument {name!r}: no range available")
 
 
 def _safe(fn: Any, default: Any = None) -> Any:
@@ -732,7 +731,7 @@ _FUNCTION_BY_DEGREE: dict[int, str] = {
 }
 
 # Consonant simple-interval names. ``simpleName`` folds the octave onto ``P1``, so
-# both unison and octave read as "P1" here; the perfect fourth is treated as a
+# both unison and octave read as "P1" here. The perfect fourth is treated as a
 # dissonance (two-part strict counterpoint).
 _CONSONANT_SIMPLE: frozenset[str] = frozenset({"P1", "P5", "m3", "M3", "m6", "M6"})
 
@@ -806,14 +805,14 @@ def _collect_pitch_names(source: list[str] | ScoreSpec) -> list[str]:
                     for event in voice.events:
                         names.extend(event.pitches)
         return names
-    return [str(p).strip() for p in source]
+    return [p.strip() for p in source]
 
 
 def _notes_stream(names: list[str]) -> stream.Stream:
     """Build a flat music21 stream of notes from scientific pitch names."""
     s = stream.Stream()
     for name in names:
-        parsed = _safe(lambda n=name: note.Note(pitch_mod.Pitch(str(n).strip())))
+        parsed = _safe(lambda n=name: note.Note(pitch_mod.Pitch(n.strip())))
         if parsed is not None:
             s.append(parsed)
     return s
@@ -829,7 +828,9 @@ def _round_corr(value: Any) -> float | None:
         return None
 
 
-def _verticals(source: ScoreSpec | list[list[str]]) -> list[tuple[float, list[str]]]:
+def _verticals(
+    source: ScoreSpec | list[str] | list[list[str]]
+) -> list[tuple[float, list[str]]]:
     """Yield ``(offset, pitch names)`` for each vertical sonority of ``source``."""
     if isinstance(source, ScoreSpec):
         chordified = _safe(lambda: score_to_music21(source).chordify())
@@ -842,14 +843,16 @@ def _verticals(source: ScoreSpec | list[list[str]]) -> list[tuple[float, list[st
 
     verticals: list[tuple[float, list[str]]] = []
     for index, group in enumerate(source):
-        pitches = [group.strip()] if isinstance(group, str) else [str(p).strip() for p in group]
+        pitches: list[str] = (
+            [group.strip()] if isinstance(group, str) else [p.strip() for p in group]
+        )
         verticals.append((float(index), pitches))
     return verticals
 
 
 def _chord(pitches: list[str]) -> chord.Chord:
     """Build a music21 chord from scientific pitch names."""
-    return chord.Chord([pitch_mod.Pitch(str(p).strip()) for p in pitches])
+    return chord.Chord([pitch_mod.Pitch(p.strip()) for p in pitches])
 
 
 def _sci(p: Any) -> str:
@@ -859,7 +862,7 @@ def _sci(p: Any) -> str:
 
 def _ps(name: str) -> float:
     """Absolute pitch value in semitones of a scientific pitch name."""
-    return float(pitch_mod.Pitch(str(name).strip()).ps)
+    return pitch_mod.Pitch(name.strip()).ps
 
 
 def _perfect_class(a: str, b: str) -> str | None:
@@ -868,7 +871,7 @@ def _perfect_class(a: str, b: str) -> str | None:
     Returns ``"unison"``, ``"octave"``, ``"fifth"`` or ``None``. The order of the
     two pitch names does not matter (they are sorted low-to-high first).
     """
-    pair = _safe(lambda: (pitch_mod.Pitch(str(a).strip()), pitch_mod.Pitch(str(b).strip())))
+    pair = _safe(lambda: (pitch_mod.Pitch(a.strip()), pitch_mod.Pitch(b.strip())))
     if pair is None:
         return None
     low, high = sorted(pair, key=lambda p: p.ps)
@@ -887,7 +890,7 @@ def _perfect_class(a: str, b: str) -> str | None:
 
 def _is_consonant(a: str, b: str) -> bool:
     """Whether two notes form a consonance (unison/octave, P5, 3rds, 6ths)."""
-    pair = _safe(lambda: (pitch_mod.Pitch(str(a).strip()), pitch_mod.Pitch(str(b).strip())))
+    pair = _safe(lambda: (pitch_mod.Pitch(a.strip()), pitch_mod.Pitch(b.strip())))
     if pair is None:
         return False
     low, high = sorted(pair, key=lambda p: p.ps)
@@ -914,7 +917,7 @@ def _function_for_degree(degree: Any) -> str:
 
 def _function_of_roman(figure: str, parsed_key: key_mod.Key) -> str:
     """Harmonic function of a roman-numeral figure in ``parsed_key``."""
-    degree = _safe(lambda: roman.RomanNumeral(str(figure).strip(), parsed_key).scaleDegree)
+    degree = _safe(lambda: roman.RomanNumeral(figure.strip(), parsed_key).scaleDegree)
     return _function_for_degree(degree)
 
 
@@ -960,8 +963,8 @@ def _designate_voices(cf: list[str], cp: list[str]) -> tuple[list[str], list[str
 def _extract_lines(spec: ScoreSpec) -> list[_Line]:
     """Lift every staff-voice into a melodic line, ordered top to bottom.
 
-    A chord contributes only its top note (each voice is treated as monophonic);
-    rests are omitted from the line.
+    A chord contributes only its top note (each voice is treated as monophonic).
+    Rests are omitted from the line.
     """
     lines: list[_Line] = []
     for pindex, part in enumerate(spec.parts):
@@ -1150,7 +1153,7 @@ def _loc_str(location: dict[str, int]) -> str:
 
 
 def _resolve_range(name: str, override: InstrumentSpec | None) -> tuple[float, float] | None:
-    """Resolve an instrument's ``(low_ps, high_ps)``; ``override`` bounds win.
+    """Resolve an instrument's ``(low_ps, high_ps)``, ``override`` bounds win.
 
     Returns ``None`` when neither the built-in table nor the override yields a
     complete low/high pair.
