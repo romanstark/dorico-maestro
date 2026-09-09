@@ -17,7 +17,39 @@ python -m venv .venv
 pip install -e ".[dev]"
 pytest                                 # run unit tests, no Dorico required
 ruff check src scripts tests           # lint check
+pyright                                # type check
+pyrefly check                          # strict type rules, see [tool.pyrefly.errors]
 ```
+
+CI runs all four. `pyright` takes its paths and its interpreter from `[tool.pyright]` in `pyproject.toml`, so it checks the same thing here as it does there. `pyrefly` enforces the stricter rules in `[tool.pyrefly.errors]`, among them `unnecessary-type-conversion`, which `pyright` does not flag — so a branch that is clean under `pyright` alone can still be rejected by CI.
+
+### Pointing your MCP client at your working copy
+
+The `command: "dorico-maestro"` from the README resolves to whatever is installed on your `PATH`, which is not your clone. To exercise the code you are editing, point the client at the entry point inside your virtual environment instead. Copy `.agents/mcp_config.example.json` to `mcp_config.json` beside it (or into your client's own config) and fill in one absolute path.
+
+Windows:
+```json
+{
+  "mcpServers": {
+    "dorico-maestro": {
+      "command": "C:\\path\\to\\clone\\.venv\\Scripts\\dorico-maestro.exe"
+    }
+  }
+}
+```
+
+macOS / Linux:
+```json
+{
+  "mcpServers": {
+    "dorico-maestro": {
+      "command": "/path/to/clone/.venv/bin/dorico-maestro"
+    }
+  }
+}
+```
+
+The path must be absolute — MCP clients do not expand `~`, environment variables or paths relative to the repository. Because `pip install -e` links the venv back to `src/`, every edit takes effect the next time the server starts; no reinstall.
 
 ## Verifying a Dorico Command
 

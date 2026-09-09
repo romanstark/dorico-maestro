@@ -566,14 +566,18 @@ async def add_rest(duration: DurationArg = "quarter") -> dict[str, Any]:
 async def transpose(
     direction: Annotated[
         str,
-        Field(description="Which way to move the pitch: up or down."),
+        Field(
+            description=(
+                "Which way to shift pitch: 'up' moves higher, 'down' moves lower."
+            )
+        ),
     ],
     chromatic: Annotated[
         bool,
         Field(
             description=(
-                "True steps by a chromatic semitone. False steps diatonically, "
-                "staying inside the key, so the interval depends on the note."
+                "True steps by an exact chromatic semitone. False steps diatonically "
+                "within the current key signature, so the interval varies by scale degree."
             )
         ),
     ] = False,
@@ -581,27 +585,38 @@ async def transpose(
         bool,
         Field(
             description=(
-                "True moves by a whole octave and overrides chromatic, which is "
-                "then not read at all."
+                "True shifts by a full octave (12 semitones or 8 diatonic steps) "
+                "and overrides chromatic, which is then ignored."
             )
         ),
     ] = False,
 ) -> dict[str, Any]:
-    """Transpose the current selection up or down.
+    """Transpose currently selected notes up or down in the score.
 
-    Relative and repeatable: calling it twice moves the selection twice as far, so
-    there is no absolute pitch to aim at here.
+    Directly modifies the score by altering the pitches of the current selection
+    in place. Relative and repeatable: calling it twice moves the selection twice
+    as far, with no absolute target pitch.
 
     Returns:
         Result dictionary with the command outcome and the catalog row
         registry_status.
 
     Note:
-        Operates on whatever is selected in Dorico (reads are selection-only), so
-        make a selection first, or place the caret with goto_bar. Maps to
-        ``NoteEdit.Pitch{Up,Down}[Chromatic|Octave]``, all of which are catalogued.
-        The result carries that row's ``registry_status``, so read it before
-        trusting the transposition, and check the score.
+        When to use: Shift existing selected notes by semitone, diatonic step,
+        or octave intervals.
+        When NOT to use: Do not use to enter new music (use write_score or
+        add_notes). Do not use to change key signatures (use set_key_signature).
+
+        Operates strictly on the active selection (reads are selection-only). If
+        nothing is selected, Dorico ignores the command and no notes are modified;
+        make a selection first or place the caret via goto_bar.
+
+        Parameters: direction sets shift orientation ('up'/'down'). chromatic
+        shifts by exact semitone when True or diatonically when False. octave=True
+        overrides chromatic and shifts by a full octave.
+
+        Maps to NoteEdit.Pitch{Up,Down}[Chromatic|Octave]. Read registry_status in
+        the returned result and verify the change in the score or via playback.
     """
     d = direction.lower()
     if d not in ("up", "down"):
@@ -856,7 +871,7 @@ async def playback(
     return {"success": False, "error": "action must be 'play', 'stop', or 'rewind'"}
 
 
-@mcp.tool(annotations=SETS)
+@mcp.tool(annotations=DESTROYS)
 async def save() -> dict[str, Any]:
     """Save the open project over its existing file on disk.
 
@@ -868,11 +883,15 @@ async def save() -> dict[str, Any]:
         Result dictionary reporting whether the command was accepted.
 
     Note:
+        When to use: Save changes in an already-saved project file on disk.
+        When NOT to use: Do not use if the project has never been saved (has no
+        path). To produce a file for external use without altering the open
+        project file, use export_pdf or export_musicxml instead.
+
         Acceptance is not completion here either (docs/protocol.md, "Command
         Acceptance vs Effect"), so a kOK does not prove the file on disk has changed.
 
-        This overwrites the .dorico project. To produce a file for something else to
-        read, without touching the project, use export_pdf or export_musicxml.
+        This overwrites the .dorico project file in place.
     """
     return await _run("File.Save")
 

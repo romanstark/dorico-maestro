@@ -22,5 +22,22 @@ Dorico Maestro is licensed under **AGPL-3.0-or-later** (see [LICENSE](LICENSE)).
 - **Format:** Open, standardized notation interchange format developed by the W3C Music Notation Community Group and published royalty-free under the W3C Community Final Specification Agreement.
 - **Usage:** Reading and writing `.musicxml` files via music21.
 
+---
+
 ## Steinberg Dorico
-Dorico is a commercial product of Steinberg Media Technologies GmbH. Dorico Maestro is an independent project that interfaces with Dorico's Remote Control API. It is not affiliated with or endorsed by Steinberg. "Dorico" and "Steinberg" are trademarks of their respective owners and are used here only descriptively.
+
+Dorico is a commercial product of **Steinberg Media Technologies GmbH**. Dorico Maestro is an independent open-source project and is **not affiliated with, sponsored by, or endorsed by Steinberg Media Technologies GmbH**.
+
+- "Steinberg" and "Dorico" are trademarks or registered trademarks of Steinberg Media Technologies GmbH, registered in Europe and other countries, as published in [Steinberg's imprint](https://www.steinberg.net/legal/imprint/). Both are used here solely for descriptive purposes to indicate software compatibility.
+- Dorico Maestro interfaces with Dorico's Remote Control WebSocket API (`ws://127.0.0.1:4560`). No proprietary Steinberg code, binaries, or assets are redistributed in this repository.
+- Steinberg Dorico itself is licensed separately by Steinberg Media Technologies GmbH under their standard software license terms.
+
+---
+
+## Ableton Live
+
+Ableton Live is a commercial product of **Ableton AG**.
+
+- "Ableton" is a registered trademark and "Live" is a trademark of Ableton AG, spelled and capitalised as published in the [Ableton trademark list](https://www.ableton.com/en/legal/trademark-list/).
+- Referenced in documentation solely for descriptive purposes to indicate workflow interoperability with the companion project [Live Maestro](https://github.com/romanstark/live-maestro).
+

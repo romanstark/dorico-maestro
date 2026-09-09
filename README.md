@@ -1,6 +1,6 @@
 # Dorico Maestro
 
-> An AI composition and orchestration partner for **Steinberg Dorico**. Speak in natural language to write notes directly into your score, audit voice leading, analyze harmony, check instrument ranges, and manage engraving layouts, right inside your open project.
+> An AI composition and orchestration partner for **Steinberg Dorico®**. Speak in natural language to write notes directly into your score, audit voice leading, analyze harmony, check instrument ranges, and manage engraving layouts, right inside your open project.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/) [![Dorico 4+](https://img.shields.io/badge/Dorico-4%20%7C%205%20%7C%206-orange.svg)](https://www.steinberg.net/dorico/) [![No telemetry](https://img.shields.io/badge/telemetry-none-brightgreen.svg)](#your-music-stays-yours) [![Glama](https://glama.ai/mcp/servers/romanstark/dorico-maestro/badges/score.svg)](https://glama.ai/mcp/servers/romanstark/dorico-maestro)
 
@@ -174,9 +174,9 @@ If anyone from Steinberg discovers this project and would like to support bringi
 
 ---
 
-## Also producing in Ableton Live?
+## Also producing in Ableton Live™?
 
-If you also produce music in a DAW, check out **[Ableton Maestro](https://github.com/romanstark/ableton-maestro)**, an MCP server built with the same architecture for Ableton Live. Bridge your workflow between session sketching in Ableton and engraving parts in Dorico with the same AI assistant.
+If you also produce music in a DAW, check out **[Live Maestro](https://github.com/romanstark/live-maestro)**, an MCP server built with the same architecture for Ableton Live. Bridge your workflow between session sketching in Ableton Live and engraving parts in Dorico with the same AI assistant.
 
 ---
 
@@ -227,4 +227,14 @@ For architectural details, wire protocols, and contributor information:
 - [docs/protocol.md](docs/protocol.md) – Dorico Remote Control WebSocket protocol specification
 - [docs/dorico_command_catalog.md](docs/dorico_command_catalog.md) – Complete base key-command catalog (340 commands)
 - [CONTRIBUTING.md](CONTRIBUTING.md) – Guidelines for contributing and command verification
+- [THIRD-PARTY.md](THIRD-PARTY.md) – Third-party notices, dependencies, and trademark attributions
 - [LICENSE](LICENSE) – AGPL-3.0 License
+
+---
+
+## Legal & Trademarks
+
+Steinberg and Dorico are trademarks or registered trademarks of Steinberg Media Technologies GmbH, registered in Europe and other countries. Ableton is a registered trademark and Live is a trademark of Ableton AG.
+
+Dorico Maestro is an independent open-source project and is not affiliated with, endorsed, sponsored, or supported by Steinberg Media Technologies GmbH or Ableton AG. For full third-party notices, licenses, and attributions, see [THIRD-PARTY.md](THIRD-PARTY.md).
+
