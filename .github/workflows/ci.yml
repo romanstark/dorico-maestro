@@ -31,5 +31,9 @@ jobs:
         # Paths, includes and the interpreter all come from [tool.pyright] in
         # pyproject.toml, so this runs the same check a contributor's editor does.
         run: pyright
+      - name: Types (pyrefly)
+        # Enforces strict typing rules including unnecessary-type-conversion configured
+        # in [tool.pyrefly] in pyproject.toml.
+        run: pyrefly check
       - name: Test (pytest)
         run: pytest -q
