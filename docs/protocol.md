@@ -20,7 +20,7 @@ Information is derived from local application logs, key commands configuration f
    - If rejected, Dorico terminates the socket with `kClientRejected_UserRejected`.
 3. Client sends: `{"message":"acceptsessiontoken","sessionToken":"..."}`
 4. Dorico confirms: `{"message":"response","code":"kConnected"}`
-5. The client caches the token (e.g., `%APPDATA%\dorico-maestro\session_token.json`) and supplies it in step 1 on future runs to bypass confirmation.
+5. The client caches the token (e.g., `%APPDATA%\dorico-maestro\session_token.json` on Windows or `~/Library/Application Support/dorico-maestro/session_token.json` on macOS) and supplies it in step 1 on future runs to bypass confirmation.
 
 ## 3. Commands & Responses
 
@@ -51,8 +51,8 @@ The Remote Control API is selection-based:
 
 ## 6. Discovering Command IDs
 
-1. **`keycommands.json`** (and localized variants) in the Dorico installation directory. Contains key-bindable command definitions.
-2. **`application.log`** in `%APPDATA%\Steinberg\Dorico 6\`. Dorico logs command IDs and arguments executed through UI interactions.
+1. **`keycommands.json`** (and localized variants) in the Dorico installation directory (`C:\Program Files\Steinberg\Dorico 6\` on Windows, `/Applications/Dorico 6.app/Contents/Resources/` on macOS). Contains key-bindable command definitions.
+2. **`application.log`** in `%APPDATA%\Steinberg\Dorico 6\` (Windows) or `~/Library/Application Support/Steinberg/Dorico 6/` (macOS). Dorico logs command IDs and arguments executed through UI interactions.
 
 ## 7. Command Catalog Overview
 

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "dorico-maestro": {
+      "command": "uv",
+      "args": ["run", "dorico-maestro"]
+    }
+  }
+}

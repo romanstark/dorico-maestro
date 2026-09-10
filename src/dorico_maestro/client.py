@@ -70,6 +70,7 @@ class DoricoClient:
         connect_timeout: float = 6.0,
         command_timeout: float = 20.0,
         approval_timeout: float = 60.0,
+        token_path: Path | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -77,6 +78,7 @@ class DoricoClient:
         self.connect_timeout = connect_timeout
         self.command_timeout = command_timeout
         self.approval_timeout = approval_timeout
+        self._token_path = token_path
 
         self._ws: Any = None
         self._state = ConnectionState.DISCONNECTED
@@ -98,8 +100,13 @@ class DoricoClient:
 
     @property
     def token_path(self) -> Path:
-        if platform.system() == "Windows":
+        if self._token_path is not None:
+            return self._token_path
+        sys_name = platform.system()
+        if sys_name == "Windows":
             base = Path(os.environ.get("APPDATA", str(Path.home())))
+        elif sys_name == "Darwin":
+            base = Path.home() / "Library" / "Application Support"
         else:
             base = Path.home() / ".config"
         return base / "dorico-maestro" / "session_token.json"
@@ -283,16 +290,43 @@ class DoricoClient:
             logger.debug("unmatched response: %s", data)
 
     def _load_token(self) -> str | None:
-        try:
-            if self.token_path.exists():
-                return json.loads(self.token_path.read_text()).get("token")
-        except Exception:  # noqa: BLE001, S110 - missing/corrupt token is non-fatal
-            pass
+        candidates = [self.token_path]
+        if self._token_path is None and platform.system() == "Darwin":
+            # Fallback for tokens previously stored under ~/.config
+            candidates.append(Path.home() / ".config" / "dorico-maestro" / "session_token.json")
+        for p in candidates:
+            try:
+                if p.exists():
+                    return json.loads(p.read_text(encoding="utf-8")).get("token")
+            except Exception:  # noqa: BLE001, S110 - missing/corrupt token is non-fatal
+                pass
         return None
 
     def _save_token(self, token: str) -> None:
         try:
             self.token_path.parent.mkdir(parents=True, exist_ok=True)
-            self.token_path.write_text(json.dumps({"token": token}))
+            content = json.dumps({"token": token})
+            if platform.system() == "Windows":
+                self.token_path.write_text(content, encoding="utf-8")
+            else:
+                try:
+                    self.token_path.parent.chmod(0o700)
+                except OSError:
+                    pass
+                flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+                fd = os.open(self.token_path, flags, 0o600)
+                try:
+                    with open(fd, "w", encoding="utf-8") as f:
+                        f.write(content)
+                except BaseException:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
+                    raise
+                try:
+                    self.token_path.chmod(0o600)
+                except OSError:
+                    pass
         except Exception as e:  # noqa: BLE001
             logger.warning("could not save session token: %s", e)

@@ -33,7 +33,9 @@ Usage::
 
     python scripts/sync_catalog.py [keycommands.json] [--catalog commands.yaml] [--dry-run]
 
-Defaults: ``keycommands.json`` -> ``C:\\Program Files\\Steinberg\\Dorico6\\keycommands.json``;
+Defaults: ``keycommands.json`` -> auto-detected across platforms (e.g.
+``C:\\Program Files\\Steinberg\\Dorico6\\keycommands.json`` on Windows or
+``/Applications/Dorico 6.app/Contents/Resources/keycommands.json`` on macOS);
 ``--catalog`` -> the packaged ``src/dorico_maestro/commands.yaml``.
 """
 
@@ -48,7 +50,29 @@ from typing import Any
 
 import yaml
 
-DEFAULT_KEYCOMMANDS = Path(r"C:\Program Files\Steinberg\Dorico6\keycommands.json")
+
+def find_default_keycommands() -> Path:
+    """Locate keycommands.json in standard Dorico installation paths."""
+    candidates: list[Path] = []
+    if sys.platform == "darwin":
+        for app in ("Dorico 6.app", "Dorico 5.app", "Dorico 4.app", "Dorico.app"):
+            candidates.append(Path(f"/Applications/{app}/Contents/Resources/keycommands.json"))
+    elif sys.platform == "win32":
+        for dir_name in ("Dorico6", "Dorico5", "Dorico4", "Dorico"):
+            candidates.append(Path(rf"C:\Program Files\Steinberg\{dir_name}\keycommands.json"))
+    else:
+        candidates.extend([
+            Path("/Applications/Dorico 6.app/Contents/Resources/keycommands.json"),
+            Path(r"C:\Program Files\Steinberg\Dorico6\keycommands.json"),
+        ])
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0] if candidates else Path("keycommands.json")
+
+
+DEFAULT_KEYCOMMANDS = find_default_keycommands()
 DEFAULT_CATALOG = (
     Path(__file__).resolve().parent.parent / "src" / "dorico_maestro" / "commands.yaml"
 )

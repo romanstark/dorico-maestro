@@ -1,0 +1,3 @@
+[mcp_servers.dorico-maestro]
+command = "uv"
+args = ["run", "dorico-maestro"]

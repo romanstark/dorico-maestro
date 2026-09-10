@@ -1,7 +1,0 @@
-{
-  "mcpServers": {
-    "dorico-maestro": {
-      "command": "<absolute path to the entry point in your venv -- Windows: C:\\path\\to\\clone\\.venv\\Scripts\\dorico-maestro.exe -- macOS/Linux: /path/to/clone/.venv/bin/dorico-maestro>"
-    }
-  }
-}

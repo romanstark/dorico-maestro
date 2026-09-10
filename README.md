@@ -92,7 +92,7 @@ uv tool install git+https://github.com/romanstark/dorico-maestro.git
 
 ### 2. Connect to Dorico
 1. Open **Steinberg Dorico** and open any project. Dorico automatically listens on local WebSocket port `4560`.
-2. On first connection, Dorico will display a permission prompt (*"Do you want to allow Dorico Maestro to connect?"*). Click **Authorize**. A persistent session token is saved automatically to `%APPDATA%\dorico-maestro\session_token.json` for future sessions.
+2. On first connection, Dorico will display a permission prompt (*"Do you want to allow Dorico Maestro to connect?"*). Click **Authorize**. A persistent session token is saved automatically (`%APPDATA%\dorico-maestro\session_token.json` on Windows, `~/Library/Application Support/dorico-maestro/session_token.json` on macOS) for future sessions.
 
 ### 3. Connect your AI assistant
 Add Dorico Maestro to your MCP client configuration (Claude Desktop, Cursor, Antigravity IDE):

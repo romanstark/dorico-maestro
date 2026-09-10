@@ -7,15 +7,14 @@ on:
 
 jobs:
   test:
-    # Both operating systems on purpose. Development happens on Windows, so a
-    # Linux-only matrix cannot see a Windows problem at all -- and it cannot see
-    # the interesting case either, where the two disagree. In the sibling project
-    # that disagreement is what exposed a file-mode fault Windows is blind to.
+    # Linux, Windows, and macOS on purpose. Development happens on Windows,
+    # so a Linux-only matrix cannot see Windows issues, while macOS and Linux
+    # catch POSIX-specific file permissions and path conventions.
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
