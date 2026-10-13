@@ -174,9 +174,15 @@ If anyone from Steinberg discovers this project and would like to support bringi
 
 ---
 
-## Also producing in Ableton Live™?
+## Related Maestro projects
 
-If you also produce music in a DAW, check out **[Live Maestro](https://github.com/romanstark/live-maestro)**, an MCP server built with the same architecture for Ableton Live. Bridge your workflow between session sketching in Ableton Live and engraving parts in Dorico with the same AI assistant.
+- [Live Maestro](https://github.com/romanstark/live-maestro) controls Ableton Live,
+  musical timing, MIDI and sample placement.
+- [UVR Maestro](https://github.com/romanstark/uvr-maestro) separates and restores
+  local audio with UVR5 models.
+
+Each server works independently. Use ordinary MIDI, audio and JSON files when
+combining their workflows.
 
 ---
 
