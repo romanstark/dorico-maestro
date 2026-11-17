@@ -84,7 +84,7 @@ The 22 command namespaces in Dorico 6 (340 base key-bindable commands):
 | `Video` | 1 | Video window display |
 | **Total** | **340** | Base key-command catalog |
 
-`src/dorico_maestro/commands.yaml` contains 348 commands: the 340 base IDs, four parameterized base commands (`NoteInput.Pitch`, `NoteInput.SetAccidental`, `Play.StartOrStop`, `Window.SwitchMode`), and four binary export commands (`File.Export`, `File.Export?FilterID=MusicXMLExportFilter`, `Print.ExportCurrentLayoutAsPDF`, `Print.ExportAllLayoutsAsPDF`).
+`src/dorico_maestro/commands.yaml` contains 354 commands: the 340 base IDs, four parameterized base commands (`NoteInput.Pitch`, `NoteInput.SetAccidental`, `Play.StartOrStop`, `Window.SwitchMode`), four binary export commands (`File.Export`, `File.Export?FilterID=MusicXMLExportFilter`, `Print.ExportCurrentLayoutAsPDF`, `Print.ExportAllLayoutsAsPDF`), and six `MusicalManipulation` menu commands (retrograde and inversion).
 Catalog status distribution: 190 verified, 23 reachable, 4 unavailable, 0 broken, 131 untested.
 
 ### Verified Core Commands (Dorico 6)
@@ -110,6 +110,14 @@ Catalog status distribution: 190 verified, 23 reachable, 4 unavailable, 0 broken
   Dorico interprets pitch letters diatonically relative to the prevailing key signature; unadorned pitch letters automatically adopt key-signature accidentals (for example, in A-flat major, letters D, E, A, and B are flattened). Because Remote API responses do not report implicit accidentals, `session.pitch_commands` prefixes every note with an explicit `NoteInput.SetAccidental` (`kNatural` for unaltered pitches) to enforce absolute pitch spelling. Dorico automatically suppresses redundant natural signs in engraving, rendering naturals only where required by the key signature *(Dorico Elements 6.2.30)*.
 - **Selection-Based Caret Placement (`NoteInput.Enter`):**
   Entering note input places the caret at the start of the active selection. Dispatching `NoteInput.Exit` -> `Edit.SelectAll` -> `NoteInput.Enter` reliably positions the caret at bar 1 of the top staff in three commands regardless of flow length *(Dorico Elements 6.2.30)*. The initial `Exit` ensures deterministic execution because `Enter` toggles note-input mode. This replaces bar-by-bar rewinding and functions uniformly across scores of any measure count.
+- **Keeping the Caret Between Calls:**
+  Because re-entry moves the caret, a tool that writes at the caret leaves a running note input alone: `goto_bar` followed by `add_notes`, `add_rest` or a note-input command from `run_command` writes where `goto_bar` stopped, and successive calls continue from there. Only when note input is off do they enter and exit it themselves *(Dorico Elements 6.2.30)*.
+- **Rest Input and the Y Key:**
+  `NoteInput.RestMode` (the comma key) only toggles rest input; it places nothing. With rest input on, `NoteInput.Pitch?Pitch=X` (the Y key) inputs a rest of the current duration; with it off, the same command repeats the previous pitch. Pitch letters input notes in either state. A rest is therefore sent as rest mode on, `Pitch=X`, rest mode off, leaving the state as found *(Dorico Elements 6.2.30)*.
+- **Pushed Status Misses Some Changes:**
+  Within one connection Dorico pushes `restMode` turning on but not turning off, so the merged snapshot keeps reporting `true`. A `{"message":"getstatus"}` request answers with the current values; `DoricoClient.fresh_status` sends it, and note entry reads note input and rest mode through it *(Dorico Elements 6.2.30)*.
+- **Stale Session Token:**
+  A saved token that Dorico no longer knows (the client was removed in Preferences > Remote) gets no answer at all. The client waits a few seconds, deletes the token and repeats the handshake without one, which brings back the approval prompt. With an MSIX-packaged client on Windows, writes to `%APPDATA%` are redirected, so the token lives under `%LOCALAPPDATA%\Packages\<app>\LocalCache\Roaming\dorico-maestro`; `connect_to_dorico` reports the path it uses. Reported on Windows 11 *(Dorico 6.2.30)*; the retry is unit-tested, not reproduced live.
 - **Caret Position on Note Input Re-Entry:**
   Re-entering note input does not restore prior caret coordinates. When no selection is active, `NoteInput.Exit` followed by `NoteInput.Enter` reactivates note input, but caret placement defaults to the current visible viewport boundary rather than retaining earlier coordinates *(Dorico Elements 6.2.30)*. Consequently, `NoteInputSession` manages input state only; explicit bar navigation must be dispatched when a target measure is required.
 - **Command Throughput and Delay Independence:**

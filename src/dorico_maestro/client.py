@@ -71,6 +71,7 @@ class DoricoClient:
         command_timeout: float = 20.0,
         approval_timeout: float = 60.0,
         token_path: Path | None = None,
+        stale_token_timeout: float = 8.0,
     ) -> None:
         self.host = host
         self.port = port
@@ -78,6 +79,7 @@ class DoricoClient:
         self.connect_timeout = connect_timeout
         self.command_timeout = command_timeout
         self.approval_timeout = approval_timeout
+        self.stale_token_timeout = stale_token_timeout
         self._token_path = token_path
 
         self._ws: Any = None
@@ -134,7 +136,7 @@ class DoricoClient:
         self._recv_task = asyncio.create_task(self._recv_loop())
         await self._do_handshake()
         self._state = ConnectionState.CONNECTED
-        logger.info("Connected to Dorico on %s", uri)
+        logger.info("Connected to Dorico on %s; session token at %s", uri, self.token_path)
         return True
 
     async def disconnect(self) -> None:
@@ -186,6 +188,26 @@ class DoricoClient:
                 break
         return out
 
+    async def fresh_status(self, wait: float = 2.0) -> dict[str, Any]:
+        """Ask Dorico for its whole status now and return the merged snapshot.
+
+        The pushed deltas are not complete: within one connection Dorico pushes
+        restMode turning on but not turning off, so the pushed snapshot keeps
+        saying true. A ``getstatus`` request answers with the current values
+        (Dorico Elements 6.2.30). Falls back to the pushed snapshot on timeout.
+        """
+        if not self.connected:
+            await self.connect()
+        if self._ws is None:
+            raise DoricoConnectionError("Not connected")
+        self._status_event.clear()
+        await self._ws.send(json.dumps({"message": "getstatus"}))
+        try:
+            await asyncio.wait_for(self._status_event.wait(), wait)
+        except TimeoutError:
+            pass
+        return dict(self._status)
+
     async def status(self, wait: float = 2.0) -> dict[str, Any]:
         """Return the merged snapshot of Dorico's pushed status."""
         if not self._status_event.is_set():
@@ -221,14 +243,41 @@ class DoricoClient:
             msg["sessionToken"] = token
         self._state = ConnectionState.AWAITING_APPROVAL
         await self._ws.send(json.dumps(msg))
+        # A valid saved token is answered at once. A stale one (the client was
+        # removed in Dorico's Remote preferences) is not answered at all, so wait
+        # briefly, then forget it and ask again without one: that brings up the
+        # approval prompt instead of hanging.
+        wait = self.stale_token_timeout if token else self.approval_timeout
         try:
-            await asyncio.wait_for(self._handshake.wait(), self.approval_timeout)
+            await asyncio.wait_for(self._handshake.wait(), wait)
         except TimeoutError as e:
+            if token:
+                await self._retry_without_token(f"no answer within {wait:g} s")
+                return
             raise DoricoConnectionError(
                 "Timed out waiting for Dorico to approve the connection"
             ) from e
         if self._handshake_error:
+            if token:
+                await self._retry_without_token(self._handshake_error)
+                return
             raise DoricoConnectionError(self._handshake_error)
+
+    async def _retry_without_token(self, reason: str) -> None:
+        """Delete the saved token and repeat the handshake on a new socket."""
+        logger.warning("Saved session token at %s refused (%s); asking Dorico again",
+                       self.token_path, reason)
+        for path in self._token_candidates():
+            path.unlink(missing_ok=True)
+        if self._recv_task:
+            self._recv_task.cancel()
+            self._recv_task = None
+        if self._ws is not None:
+            await self._ws.close()
+        self._ws = await asyncio.wait_for(
+            websockets.connect(f"ws://{self.host}:{self.port}"), self.connect_timeout)
+        self._recv_task = asyncio.create_task(self._recv_loop())
+        await self._do_handshake()
 
     async def _recv_loop(self) -> None:
         assert self._ws is not None
@@ -289,12 +338,15 @@ class DoricoClient:
         else:
             logger.debug("unmatched response: %s", data)
 
-    def _load_token(self) -> str | None:
+    def _token_candidates(self) -> list[Path]:
         candidates = [self.token_path]
         if self._token_path is None and platform.system() == "Darwin":
             # Fallback for tokens previously stored under ~/.config
             candidates.append(Path.home() / ".config" / "dorico-maestro" / "session_token.json")
-        for p in candidates:
+        return candidates
+
+    def _load_token(self) -> str | None:
+        for p in self._token_candidates():
             try:
                 if p.exists():
                     return json.loads(p.read_text(encoding="utf-8")).get("token")

@@ -60,11 +60,15 @@ async def note_input_if_needed(
 ) -> AsyncGenerator[None, None]:
     """Enter note input if required by spec and guarantee exit on completion.
 
-    Sends ``NoteInput.Exit`` before ``NoteInput.Enter``. Enter toggles, so on an
-    already-running note input it would switch the caret off for the whole block.
-    Exit is absolute and costs nothing when note input is already off.
+    Leaves a running note input alone, so a caret placed by ``goto_bar`` is kept.
+    Otherwise sends ``NoteInput.Exit`` before ``NoteInput.Enter`` (Enter toggles)
+    and ``NoteInput.Exit`` afterwards. Re-entering would move the caret to the
+    start of the selection or to the viewport.
     """
     if not spec.requires_note_input:
+        yield
+        return
+    if (await client.status()).get("noteInputActive"):
         yield
         return
     await client.send("NoteInput.Exit")

@@ -239,3 +239,14 @@ def test_result_blocked_helper() -> None:
     assert result.ok is False
     assert result.command == "Edit.Delete"
     assert result.message == "nope"
+
+
+async def test_running_note_input_is_left_alone() -> None:
+    spec = CommandSpec(
+        id="NoteInput.RestMode",
+        category="NoteInput",
+        requires_note_input=True,
+    )
+    client = FakeClient(status={"noteInputActive": True})
+    await execute(client, _registry(spec), "NoteInput.RestMode")
+    assert client.sent == ["NoteInput.RestMode"]

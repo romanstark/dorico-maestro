@@ -786,7 +786,7 @@
     category: NoteInput
     status: verified
     requires_note_input: true
-    doc: "Toggle rest input: the next duration entered becomes a rest."
+    doc: "Toggle rest input (the comma key). It places nothing: with rest input on, NoteInput.Pitch with Pitch=X (the Y key) inputs a rest; with it off, Pitch=X repeats the previous pitch. Pushed status does not report it turning off within a connection; ask getstatus."
   - id: "NoteInput.Scissor"
     category: NoteInput
     status: untested
@@ -1353,9 +1353,9 @@
     requires_note_input: true
     verify: note_added
     params:
-      - {name: pitch, dorico: Pitch, kind: enum, enum: ["A", "B", "C", "D", "E", "F", "G"], required: true}
-      - {name: octave, dorico: OctaveValue, kind: int, required: true}
-    doc: "Input a pitch at the caret (letter A-G in Pitch, scientific octave in OctaveValue). The letter is entered DIATONICALLY in the flow's key, so C D E in A flat major yields C Db Eb. Prefix every note with NoteInput.SetAccidental, kNatural included, to pin an absolute pitch."
+      - {name: pitch, dorico: Pitch, kind: enum, enum: ["A", "B", "C", "D", "E", "F", "G", "X"], required: true}
+      - {name: octave, dorico: OctaveValue, kind: int, required: false}
+    doc: "Input a pitch at the caret: letter A-G in Pitch (entered diatonically in the flow's key, so send NoteInput.SetAccidental first, kNatural included) and scientific octave in OctaveValue. Pitch=X without an octave is the Y key: a rest while rest input is on, else the previous pitch again."
   - id: "NoteInput.SetAccidental"
     category: NoteInput
     status: verified
@@ -1375,3 +1375,30 @@
     params:
       - {name: location, dorico: PlayFromLocation, kind: enum, enum: ["kPlayhead", "kSelection", "kStartOfFlow", "kLastStartPosition"], required: true}
     doc: "Start or stop playback from the given location."
+
+  # ==== musical manipulation (menu commands, absent from keycommands.json) ====
+  # IDs read from the Dorico 6 application binary; not yet run on a clean selection.
+  - id: "MusicalManipulation.RetrogradePitches"
+    category: MusicalManipulation
+    status: untested
+    doc: "Write > Transform > Retrograde pitches on the selection; rhythm stays."
+  - id: "MusicalManipulation.RetrogradeRhythm"
+    category: MusicalManipulation
+    status: untested
+    doc: "Retrograde the rhythm of the selection; pitches stay."
+  - id: "MusicalManipulation.RetrogradePitchesAndRhythm"
+    category: MusicalManipulation
+    status: untested
+    doc: "Retrograde pitches and rhythm of the selection together."
+  - id: "MusicalManipulation.InvertPitches"
+    category: MusicalManipulation
+    status: untested
+    doc: "Invert the pitches of the selection (Write > Transform > Invert)."
+  - id: "MusicalManipulation.RetrogradeAndInvertPitches"
+    category: MusicalManipulation
+    status: untested
+    doc: "Retrograde and invert the pitches of the selection."
+  - id: "MusicalManipulation.RetrogradePitchesAndRhythmAndInvertPitches"
+    category: MusicalManipulation
+    status: untested
+    doc: "Retrograde pitches and rhythm and invert the pitches of the selection."

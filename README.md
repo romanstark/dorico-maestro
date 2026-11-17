@@ -75,7 +75,7 @@ Dorico Maestro is built on a **robust, safety-first architecture**:
 - **Lifecycle & Caret Safety:** Note input commands use strict session context managers (`try ... finally: NoteInput.Exit`). Even if an operation fails or arguments are malformed, Dorico is never left stranded in an open note-input state.
 - **Destructive Command Guard:** Commands that could discard musical work (`Edit.Delete`, `File.Close`, `File.Quit`) are automatically blocked unless explicitly authorized with `confirm=True`.
 - **Overwrite Mode Transparency:** Because Dorico defaults to Overwrite mode and the Remote Control API cannot read bar contents back, Maestro monitors `noteInputMode` and flags `displaces_existing: true` in its response whenever notes land in Overwrite mode.
-- **Data-Driven & Verified:** Built on a comprehensive catalog of 348 commands, with **190 of 348** commands verified live against Dorico 6.
+- **Data-Driven & Verified:** Built on a comprehensive catalog of 354 commands, with **190 of 354** commands verified live against Dorico 6.
 - **Dual Writing Paths:** Offers direct live caret input for fast interactive editing, and native MusicXML generation powered by music21 for complete multi-voice orchestral scores.
 
 ---

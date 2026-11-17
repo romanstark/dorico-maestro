@@ -160,6 +160,8 @@ GOLDEN: list[str] = [
     "NoteInput.Pitch?Pitch=G&OctaveValue=5",
     "NoteInput.StartEndChord",
     "NoteInput.RestMode",
+    "NoteInput.Pitch?Pitch=X",
+    "NoteInput.RestMode",
     "NoteInput.Exit",
     "Edit.SelectAll",
     "NoteInput.Enter",

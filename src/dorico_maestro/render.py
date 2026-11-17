@@ -35,7 +35,12 @@ from dorico_maestro.models import (
     NoteDuration,
 )
 from dorico_maestro.music.score import ScoreSpec, Staff
-from dorico_maestro.session import NoteInputSession, pitch_commands
+from dorico_maestro.session import (
+    NoteInputSession,
+    current_status,
+    pitch_commands,
+    rest_commands,
+)
 
 if TYPE_CHECKING:
     from dorico_maestro.client import CommandSender, DoricoTransport
@@ -103,7 +108,7 @@ def plan_staff(staff: Staff, *, reemit_duration: bool = True) -> tuple[list[str]
     Returns ``(commands, warnings)``. The base note value is emitted at the staff
     start (when ``reemit_duration``) and again whenever it changes. Dots repeat
     ``CycleNumDots``. Chords are wrapped in a ``StartEndChord`` pair. Ties
-    (``Tie``) and rests (``RestMode``) are emitted.
+    (``Tie``) and rests (rest mode on, the rest key, rest mode off) are emitted.
 
     ``NoteInput.SetArticulation`` is a persistent caret toggle rather than a
     per-note property: an articulation remains active until toggled off. Active
@@ -157,7 +162,7 @@ def plan_staff(staff: Staff, *, reemit_duration: bool = True) -> tuple[list[str]
         active = want
 
         if ev.is_rest:
-            commands.append("NoteInput.RestMode")
+            commands.extend(rest_commands(rest_mode_on=False))
         elif ev.is_chord:
             commands.append("NoteInput.StartEndChord")
             for name in ev.pitches:
@@ -274,8 +279,11 @@ async def render_score(
     # whose leading Exit is what makes the Enter after it reliable, and closes with
     # Exit. So it is sent whole rather than sliced. NoteInputSession is still what
     # guarantees the caret is closed when a send raises part way through.
-    async with NoteInputSession(client):
+    async with NoteInputSession(client, keep_caret=False):
         await _clear_caret_articulations(client)
+        # Each planned rest assumes rest mode off and leaves it off.
+        if (await current_status(client)).get("restMode"):
+            await client.send("NoteInput.RestMode")
         for command in commands:
             await client.send(command)
 

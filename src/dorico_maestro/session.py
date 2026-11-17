@@ -62,30 +62,68 @@ def pitch_commands(spec: str) -> list[str]:
     ]
 
 
+#: Inputs a rest while rest mode is on; with it off, it repeats the previous pitch
+#: instead. It is the Y key (Dorico Elements 6.2.30).
+REST_KEY = "NoteInput.Pitch?Pitch=X"
+
+
+def rest_commands(rest_mode_on: bool) -> list[str]:
+    """Return the commands for one rest, leaving rest mode as it was found.
+
+    ``NoteInput.RestMode`` only toggles rest input (the comma key) and places
+    nothing; the rest itself comes from :data:`REST_KEY`.
+    """
+    if rest_mode_on:
+        return [REST_KEY]
+    return ["NoteInput.RestMode", REST_KEY, "NoteInput.RestMode"]
+
+
+async def current_status(client: object) -> dict[str, object]:
+    """Return Dorico's current status, asked fresh where the client can.
+
+    A client without status answers an empty dict, which reads as note input
+    and rest mode both off.
+    """
+    for name in ("fresh_status", "status"):
+        method = getattr(client, name, None)
+        if method is not None:
+            return dict(await method())
+    return {}
+
+
 class NoteInputSession:
     """Async context manager wrapping Dorico's note-input caret lifecycle.
 
-    ``__aenter__`` sends ``NoteInput.Exit`` followed by ``NoteInput.Enter``.
-    Because ``NoteInput.Enter`` toggles note input, sending ``NoteInput.Exit``
-    first guarantees a known starting state without toggling off an active caret.
-    What it does not guarantee is a position: the caret comes back at the start of
-    the current selection, or somewhere unrelated when nothing is selected, never
-    where it stood before. Move to the bar you want inside the block
-    (Dorico Elements 6.2.30).
-    ``__aexit__`` ensures ``NoteInput.Exit`` is sent even if an exception occurs.
-    Inside the ``async with`` block, set a duration then add pitches/rests.
+    When note input is already running (after ``goto_bar``), the session sends
+    nothing on entry or exit, so the caret stays where it was put and the next
+    call continues from there. Re-entering would lose it: ``NoteInput.Exit`` then
+    ``NoteInput.Enter`` brings the caret back at the start of the selection, or
+    at the viewport when nothing is selected (Dorico Elements 6.2.30).
+
+    When note input is off, ``__aenter__`` sends ``NoteInput.Exit`` then
+    ``NoteInput.Enter`` (Enter toggles, so Exit first gives a known state) and
+    ``__aexit__`` sends ``NoteInput.Exit`` even if an exception occurs.
+    ``keep_caret=False`` always re-enters and exits, for callers that position
+    the caret themselves.
     """
 
-    def __init__(self, client: CommandSender) -> None:
+    def __init__(self, client: CommandSender, *, keep_caret: bool = True) -> None:
         self._client = client
+        self._keep_caret = keep_caret
+        self._was_active = False
 
     async def __aenter__(self) -> Self:
-        await self._client.send("NoteInput.Exit")
-        await self._client.send("NoteInput.Enter")
+        self._was_active = False
+        if self._keep_caret:
+            self._was_active = bool((await current_status(self._client)).get("noteInputActive"))
+        if not self._was_active:
+            await self._client.send("NoteInput.Exit")
+            await self._client.send("NoteInput.Enter")
         return self
 
     async def __aexit__(self, *exc: object) -> None:
-        await self._client.send("NoteInput.Exit")
+        if not self._was_active:
+            await self._client.send("NoteInput.Exit")
 
     async def set_duration(self, d: NoteDuration) -> None:
         """Set the caret's note value for subsequent pitches/rests."""
@@ -97,5 +135,7 @@ class NoteInputSession:
             await self._client.send(cmd)
 
     async def rest(self) -> None:
-        """Input a rest of the current duration at the caret."""
-        await self._client.send("NoteInput.RestMode")
+        """Input a rest of the current duration at the caret, leaving rest mode as found."""
+        rest_mode = bool((await current_status(self._client)).get("restMode"))
+        for command in rest_commands(rest_mode):
+            await self._client.send(command)

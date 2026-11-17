@@ -31,7 +31,7 @@ server.py                FastMCP tool definitions and dorico://commands resource
 
 ## Command Catalog
 
-`src/dorico_maestro/commands.yaml` serves as the single source of truth for command metadata. The catalog contains 348 commands, comprising 340 base IDs from Dorico 6, four parameterized core commands (`NoteInput.Pitch`, `NoteInput.SetAccidental`, `Window.SwitchMode`, `Play.StartOrStop`), and four binary export commands (`File.Export`, `File.Export?FilterID=MusicXMLExportFilter`, `Print.ExportCurrentLayoutAsPDF`, `Print.ExportAllLayoutsAsPDF`).
+`src/dorico_maestro/commands.yaml` serves as the single source of truth for command metadata. The catalog contains 354 commands, comprising 340 base IDs from Dorico 6, four parameterized core commands (`NoteInput.Pitch`, `NoteInput.SetAccidental`, `Window.SwitchMode`, `Play.StartOrStop`), four binary export commands (`File.Export`, `File.Export?FilterID=MusicXMLExportFilter`, `Print.ExportCurrentLayoutAsPDF`, `Print.ExportAllLayoutsAsPDF`), and six `MusicalManipulation` menu commands for retrograde and inversion that Dorico does not list as key commands.
 
 Example catalog entry:
 
@@ -66,12 +66,13 @@ The `execute` function encapsulates all cross-cutting dispatch concerns:
 
 ## Command Families
 
-Category status distribution across the 348 catalog rows:
+Category status distribution across the 354 catalog rows:
 
 - **NoteInput (125 rows, 101 verified, 1 unavailable, 23 untested):** Handled via `NoteInputSession` in `session.py`. Manages entry, duration setting, pitch entry, and clean exit.
 - **EventEdit (57 rows, 4 verified, 53 untested):** Commands operating on the active selection (navigation, transposition, rhythm adjustment). The four verified rows are `Navigate*` commands.
 - **Play (31 rows, 24 verified, 2 unavailable, 5 untested):** Transport and playhead controls. `Play.StartOrStop` accepts `PlayFromLocation` targets.
 - **Setup (10) and Project (8):** Structural operations (players, flows, layouts).
+- **MusicalManipulation (6 rows, 6 untested):** Retrograde and inversion of the selection, the menu's Write > Transform. Dorico lists them as no key command.
 
 ## Musical Domain Layer (`music/`)
 

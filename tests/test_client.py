@@ -9,6 +9,7 @@ a stand-in socket, so they need neither a running Dorico nor a real WebSocket.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import platform
 import sys
@@ -166,3 +167,50 @@ def test_save_token_sets_posix_permissions(tmp_path: Path) -> None:
     mode = token_file.stat().st_mode & 0o777
     assert mode == 0o600
 
+
+
+class _ApprovalSocket:
+    """Ignores a connect that carries a token; approves one that does not."""
+
+    def __init__(self, client: DoricoClient) -> None:
+        self._client = client
+        self.frames: list[dict[str, str]] = []
+
+    async def send(self, payload: str) -> None:
+        frame = json.loads(payload)
+        self.frames.append(frame)
+        if frame["message"] == "connect" and "sessionToken" not in frame:
+            await self._client._handle(json.dumps({"message": "sessiontoken",
+                                                    "sessionToken": "fresh"}))
+        elif frame["message"] == "acceptsessiontoken":
+            self._client._handle_response({"message": "response", "code": "kConnected"})
+
+    async def close(self) -> None:
+        """Match the socket interface."""
+
+    def __aiter__(self) -> _ApprovalSocket:
+        return self
+
+    async def __anext__(self) -> str:
+        await asyncio.Event().wait()
+        raise StopAsyncIteration
+
+
+async def test_a_stale_token_is_dropped_and_approval_asked_again(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    token = tmp_path / "session_token.json"
+    token.write_text(json.dumps({"token": "removed-in-dorico"}), encoding="utf-8")
+    client = DoricoClient(port=4560, token_path=token, stale_token_timeout=0.05)
+    sockets: list[_ApprovalSocket] = []
+
+    async def fake_connect(uri: str) -> _ApprovalSocket:
+        sockets.append(_ApprovalSocket(client))
+        return sockets[-1]
+
+    monkeypatch.setattr("dorico_maestro.client.websockets.connect", fake_connect)
+    assert await client.connect() is True
+    assert sockets[0].frames[0]["sessionToken"] == "removed-in-dorico"
+    assert "sessionToken" not in sockets[1].frames[0]
+    assert json.loads(token.read_text(encoding="utf-8"))["token"] == "fresh"
+    await client.disconnect()

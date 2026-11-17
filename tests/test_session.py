@@ -87,6 +87,8 @@ async def test_session_lifecycle_order() -> None:
         "NoteInput.SetAccidental?Type=kSharp",
         "NoteInput.Pitch?Pitch=F&OctaveValue=5",
         "NoteInput.RestMode",
+        "NoteInput.Pitch?Pitch=X",
+        "NoteInput.RestMode",
         "NoteInput.Exit",
     ]
 
@@ -98,3 +100,64 @@ async def test_session_exits_on_error() -> None:
             raise RuntimeError("boom")
     # Exit is guaranteed even when the body raises.
     assert client.sent == ["NoteInput.Exit", "NoteInput.Enter", "NoteInput.Exit"]
+
+
+class ActiveCaretClient(FakeClient):
+    """A client whose pushed status says note input is already running."""
+
+    def __init__(self, active: bool) -> None:
+        super().__init__()
+        self.active = active
+
+    async def status(self, wait: float = 2.0) -> dict[str, bool]:
+        return {"noteInputActive": self.active}
+
+
+async def test_running_note_input_keeps_the_caret() -> None:
+    # goto_bar leaves note input on at the bar it reached. Exit then Enter would
+    # throw the caret back to the selection start, so nothing is sent around it.
+    client = ActiveCaretClient(active=True)
+    async with NoteInputSession(client) as session:
+        await session.pitch("B4")
+    assert client.sent == [
+        "NoteInput.SetAccidental?Type=kNatural",
+        "NoteInput.Pitch?Pitch=B&OctaveValue=4",
+    ]
+
+
+async def test_keep_caret_false_always_reenters() -> None:
+    client = ActiveCaretClient(active=True)
+    async with NoteInputSession(client, keep_caret=False):
+        pass
+    assert client.sent == ["NoteInput.Exit", "NoteInput.Enter", "NoteInput.Exit"]
+
+
+class RestModeClient(ActiveCaretClient):
+    """Note input running and rest mode already switched on."""
+
+    async def status(self, wait: float = 2.0) -> dict[str, bool]:
+        return {"noteInputActive": True, "restMode": True}
+
+
+async def test_rest_leaves_rest_mode_on_when_it_was_on() -> None:
+    # The comma key only toggles rest input; the rest itself is the Y key. When
+    # rest mode is already on, toggling it would turn it off and Y would repeat
+    # the previous pitch instead.
+    client = RestModeClient(active=True)
+    async with NoteInputSession(client) as session:
+        await session.rest()
+    assert client.sent == ["NoteInput.Pitch?Pitch=X"]
+
+
+async def test_fresh_status_is_preferred_over_pushed() -> None:
+    class Stale(ActiveCaretClient):
+        async def fresh_status(self, wait: float = 2.0) -> dict[str, bool]:
+            return {"noteInputActive": True, "restMode": False}
+
+        async def status(self, wait: float = 2.0) -> dict[str, bool]:
+            return {"noteInputActive": True, "restMode": True}  # pushed, stale
+
+    client = Stale(active=True)
+    async with NoteInputSession(client) as session:
+        await session.rest()
+    assert client.sent == ["NoteInput.RestMode", "NoteInput.Pitch?Pitch=X", "NoteInput.RestMode"]

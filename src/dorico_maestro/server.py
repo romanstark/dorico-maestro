@@ -3,7 +3,7 @@
 This module provides the MCP interface described in docs/architecture.md:
 intent-focused tools (add notes, transpose, playback), a generic run_command
 escape hatch, and a dorico://commands resource enabling discovery of the
-348 catalogued commands without per-command tool declarations.
+354 catalogued commands without per-command tool declarations.
 
 Single-command tools route through dorico_maestro.executor.execute against the
 shared default registry. Caret and note input tools drive NoteInputSession or
@@ -325,14 +325,22 @@ async def connect_to_dorico() -> dict[str, Any]:
     Note:
         On the first connection Dorico shows an authorization prompt inside the
         application, and nothing proceeds until a person accepts it. The token is
-        then kept in AppData and later runs connect without asking.
+        then kept on disk (session_token_path in the answer) and later runs connect
+        without asking. A token Dorico no longer knows, because the client was
+        removed in its Remote preferences, is deleted after a short wait and the
+        prompt appears again. On Windows with an MSIX-packaged client the token
+        really lives under %LOCALAPPDATA%\\Packages\\<app>\\LocalCache\\Roaming.
 
         Use get_status afterwards to re-read the state without reconnecting.
     """
     try:
         client = _client_instance()
         await client.connect()
-        return {"success": True, "status": await client.status()}
+        return {
+            "success": True,
+            "status": await client.status(),
+            "session_token_path": str(client.token_path),
+        }
     except DoricoConnectionError as e:
         return {"success": False, "error": str(e)}
 
@@ -441,12 +449,13 @@ async def add_notes(
         ),
     ] = False,
 ) -> dict[str, Any]:
-    """Input notes at the caret, then leave note-input mode cleanly.
+    """Input notes at the caret.
 
-    ONE insertion at the current caret. For a SEQUENCE of notes or chords over
-    time, use ``write_score`` / ``render_to_dorico`` with a ScoreSpec (a chord is
-    one event with >=2 pitches). Repeated ``add_notes`` calls do NOT chain: each
-    re-enters note input at the same spot, so successive chords stack on one beat.
+    After ``goto_bar`` note input is running: the notes land where it stopped,
+    note input stays on, and the next call continues after them. Without a
+    running note input this enters it at the selection (or the viewport) and
+    leaves it afterwards. For a longer passage, ``write_score`` with a ScoreSpec
+    positions each staff itself (a chord is one event with >=2 pitches).
 
     Returns:
         Result dictionary with the notes and duration entered, the note input mode
@@ -459,9 +468,10 @@ async def add_notes(
         application rather than to this call, so it is reported back and not chosen
         here. get_status reads it beforehand.
 
-        Uses :class:`NoteInputSession`, so note input is always exited even on
-        error. Success indicates command acceptance (kOK). Verify note placement
-        via get_status, playback, or score inspection. Do not read can_undo as
+        Uses :class:`NoteInputSession`: note input it opened is exited even on
+        error, and note input that was already running is left on. Success
+        indicates command acceptance (kOK). Verify note placement via
+        get_status, playback, or score inspection. Do not read can_undo as
         that verification: entering note input alone already sets it.
     """
     if not notes:
@@ -510,10 +520,12 @@ async def add_notes(
 
 @mcp.tool(annotations=ADDS)
 async def add_rest(duration: DurationArg = "quarter") -> dict[str, Any]:
-    """Input one rest at the caret, then leave note-input mode cleanly.
+    """Input one rest at the caret.
 
     One rest at the current caret position, which then advances by that duration.
-    Note input is always exited afterwards, including when the call fails.
+    It switches rest input on, presses the rest key and switches rest input off
+    again, so rest mode is left as it was found. After ``goto_bar`` note input
+    stays on and the next call continues; otherwise it is entered and exited here.
 
     Returns:
         Result dictionary with success, the duration entered, the undo flag and the
@@ -524,9 +536,8 @@ async def add_rest(duration: DurationArg = "quarter") -> dict[str, Any]:
         it was wanted (docs/protocol.md, 'Command Acceptance vs Effect'). Check with
         get_status or by inspecting the score.
 
-        For a passage rather than one rest, put rest events in a ScoreSpec and use
-        write_score: repeated calls here do not chain, because each one re-enters
-        note input at the caret. Use goto_bar first to choose where it lands.
+        For a passage, put rest events in a ScoreSpec and use write_score. Use
+        goto_bar first to choose where a single rest lands.
         Do not read can_undo as evidence: entering note input alone already sets it.
     """
     try:
@@ -551,11 +562,7 @@ async def add_rest(duration: DurationArg = "quarter") -> dict[str, Any]:
             "displaces_existing": mode_before == "kOverwrite",
             "mode_note": _input_mode_note(mode_before),
             "verified": False,
-            "note": (
-                "UNVERIFIED: rest entry sends NoteInput.RestMode, which is a toggle: a "
-                "single send may only arm rest input rather than place a rest. "
-                "Confirm in the score. " + _CAN_UNDO_CAVEAT + " " + _KOK_CAVEAT
-            ),
+            "note": _CAN_UNDO_CAVEAT + " " + _KOK_CAVEAT,
         }
     except DoricoConnectionError as e:
         return {"success": False, "error": str(e)}
@@ -1936,7 +1943,7 @@ def search_commands(
 def commands_catalog() -> str:
     """Return the complete Dorico command catalog formatted as JSON.
 
-    Exposes all 348 commands with metadata, parameter signatures, and verification
+    Exposes all 354 commands with metadata, parameter signatures, and verification
     status without requiring individual tool declarations.
     """
     try:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -13,6 +14,8 @@ from dorico_maestro.models import Response
 
 class FakeClient:
     """Stand-in for DoricoClient: records commands, never opens a socket."""
+
+    token_path = Path("session_token.json")
 
     def __init__(self, *, ok: bool = True, status: dict[str, Any] | None = None) -> None:
         self.sent: list[str] = []
@@ -222,6 +225,8 @@ async def test_add_rest_sequence(fake: FakeClient) -> None:
         "NoteInput.Exit",
         "NoteInput.Enter",
         "NoteInput.NoteValue?LogDuration=kMinim",
+        "NoteInput.RestMode",
+        "NoteInput.Pitch?Pitch=X",
         "NoteInput.RestMode",
         "NoteInput.Exit",
     ]
