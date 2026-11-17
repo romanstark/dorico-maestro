@@ -72,7 +72,7 @@ Category status distribution across the 354 catalog rows:
 - **EventEdit (57 rows, 4 verified, 53 untested):** Commands operating on the active selection (navigation, transposition, rhythm adjustment). The four verified rows are `Navigate*` commands.
 - **Play (31 rows, 24 verified, 2 unavailable, 5 untested):** Transport and playhead controls. `Play.StartOrStop` accepts `PlayFromLocation` targets.
 - **Setup (10) and Project (8):** Structural operations (players, flows, layouts).
-- **MusicalManipulation (6 rows, 6 untested):** Retrograde and inversion of the selection, the menu's Write > Transform. Dorico lists them as no key command.
+- **MusicalManipulation (6 rows, 6 verified):** Write > Transform on the selection. The three retrograde commands act directly; the three with inversion open a modal dialog a person must confirm. Dorico lists them as no key command.
 
 ## Musical Domain Layer (`music/`)
 

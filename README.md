@@ -75,7 +75,7 @@ Dorico Maestro is built on a **robust, safety-first architecture**:
 - **Lifecycle & Caret Safety:** Note input commands use strict session context managers (`try ... finally: NoteInput.Exit`). Even if an operation fails or arguments are malformed, Dorico is never left stranded in an open note-input state.
 - **Destructive Command Guard:** Commands that could discard musical work (`Edit.Delete`, `File.Close`, `File.Quit`) are automatically blocked unless explicitly authorized with `confirm=True`.
 - **Overwrite Mode Transparency:** Because Dorico defaults to Overwrite mode and the Remote Control API cannot read bar contents back, Maestro monitors `noteInputMode` and flags `displaces_existing: true` in its response whenever notes land in Overwrite mode.
-- **Data-Driven & Verified:** Built on a comprehensive catalog of 354 commands, with **190 of 354** commands verified live against Dorico 6.
+- **Data-Driven & Verified:** Built on a comprehensive catalog of 354 commands, with **196 of 354** commands verified live against Dorico 6.
 - **Dual Writing Paths:** Offers direct live caret input for fast interactive editing, and native MusicXML generation powered by music21 for complete multi-voice orchestral scores.
 
 ---
@@ -147,7 +147,7 @@ Dorico's Remote Control API is powerful, but certain tasks are intentionally res
 
 ## Current Verification Status
 
-Verified live (190 commands), grouped by category:
+Verified live (196 commands), grouped by category:
 - `NoteInput` 101 of 125: Pitches, durations, accidentals, articulations, chords, tuplets, and popovers.
 - `Window` 26 of 29: Window modes, layout views, panels, toolbar, and zoom controls.
 - `Play` 24 of 31: Transport commands, playhead placement, and mixer controls.
@@ -158,11 +158,12 @@ Verified live (190 commands), grouped by category:
 - `File` 4 of 11: Project save and MusicXML import/export filters.
 - `UI` 3 of 7: Panel focusing commands.
 - `Print` 1 of 7: Unattended PDF export (`Print.ExportCurrentLayoutAsPDF`).
+- `MusicalManipulation` 6 of 6: Retrograde of pitches, rhythm or both; the inversion commands open a dialog to confirm.
 
 The remaining 12 categories are currently untested.
 
 ### Testing & Environment
-Empirical testing was conducted against **Dorico 6.2.30 Elements** on Windows 11. Dorico restricts commands depending on product tier (SE, Elements, Pro). Commands requiring Pro (such as Lua scripting) return `kUnknownCommand` and are classified as `unavailable` rather than `broken`.
+Empirical testing was conducted against **Dorico 6.2.30 Elements** on Windows 11 and macOS. Dorico restricts commands depending on product tier (SE, Elements, Pro). Commands requiring Pro (such as Lua scripting) return `kUnknownCommand` and are classified as `unavailable` rather than `broken`.
 
 Dorico Maestro exposes **30 tools** and one resource (`dorico://commands`) for complete command discovery.
 

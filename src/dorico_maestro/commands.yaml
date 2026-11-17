@@ -1377,28 +1377,28 @@
     doc: "Start or stop playback from the given location."
 
   # ==== musical manipulation (menu commands, absent from keycommands.json) ====
-  # IDs read from the Dorico 6 application binary; not yet run on a clean selection.
+  # IDs read from the Dorico 6 application binary.
   - id: "MusicalManipulation.RetrogradePitches"
     category: MusicalManipulation
-    status: untested
-    doc: "Write > Transform > Retrograde pitches on the selection; rhythm stays."
+    status: verified
+    doc: "Retrograde the pitches of the selection; the rhythm stays (C half, D, F becomes F half, D, C)."
   - id: "MusicalManipulation.RetrogradeRhythm"
     category: MusicalManipulation
-    status: untested
-    doc: "Retrograde the rhythm of the selection; pitches stay."
+    status: verified
+    doc: "Retrograde the rhythm of the selection; the pitches stay (C half, D, F becomes C, D, F half)."
   - id: "MusicalManipulation.RetrogradePitchesAndRhythm"
     category: MusicalManipulation
-    status: untested
-    doc: "Retrograde pitches and rhythm of the selection together."
+    status: verified
+    doc: "Retrograde pitches and rhythm together (C half, D, F becomes F, D, C half)."
   - id: "MusicalManipulation.InvertPitches"
     category: MusicalManipulation
-    status: untested
-    doc: "Invert the pitches of the selection (Write > Transform > Invert)."
+    status: verified
+    doc: "Opens Dorico's modal Invert pitches dialog (axis and diatonic or chromatic), which a person must confirm; nothing changes before OK."
   - id: "MusicalManipulation.RetrogradeAndInvertPitches"
     category: MusicalManipulation
-    status: untested
-    doc: "Retrograde and invert the pitches of the selection."
+    status: verified
+    doc: "Opens the same modal Invert pitches dialog as InvertPitches; a person must confirm it."
   - id: "MusicalManipulation.RetrogradePitchesAndRhythmAndInvertPitches"
     category: MusicalManipulation
-    status: untested
-    doc: "Retrograde pitches and rhythm and invert the pitches of the selection."
+    status: verified
+    doc: "Opens the same modal Invert pitches dialog as InvertPitches; a person must confirm it."
