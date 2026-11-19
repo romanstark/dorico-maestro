@@ -31,7 +31,7 @@ server.py                FastMCP tool definitions and dorico://commands resource
 
 ## Command Catalog
 
-`src/dorico_maestro/commands.yaml` serves as the single source of truth for command metadata. The catalog contains 367 commands, comprising 340 base IDs from Dorico 6, four parameterized core commands (`NoteInput.Pitch`, `NoteInput.SetAccidental`, `Window.SwitchMode`, `Play.StartOrStop`), four binary export commands (`File.Export`, `File.Export?FilterID=MusicXMLExportFilter`, `Print.ExportCurrentLayoutAsPDF`, `Print.ExportAllLayoutsAsPDF`), and six `MusicalManipulation` menu commands for retrograde and inversion that Dorico does not list as key commands.
+`src/dorico_maestro/commands.yaml` serves as the single source of truth for command metadata. The catalog contains 369 commands, comprising 340 base IDs from Dorico 6, four parameterized core commands (`NoteInput.Pitch`, `NoteInput.SetAccidental`, `Window.SwitchMode`, `Play.StartOrStop`), four binary export commands (`File.Export`, `File.Export?FilterID=MusicXMLExportFilter`, `Print.ExportCurrentLayoutAsPDF`, `Print.ExportAllLayoutsAsPDF`), and six `MusicalManipulation` menu commands for retrograde and inversion that Dorico does not list as key commands.
 
 Example catalog entry:
 
@@ -66,12 +66,12 @@ The `execute` function encapsulates all cross-cutting dispatch concerns:
 
 ## Command Families
 
-Category status distribution across the 367 catalog rows:
+Category status distribution across the 369 catalog rows:
 
 - **NoteInput (125 rows, 101 verified, 1 unavailable, 23 untested):** Handled via `NoteInputSession` in `session.py`. Manages entry, duration setting, pitch entry, and clean exit.
 - **EventEdit (57 rows, 4 verified, 53 untested):** Commands operating on the active selection (navigation, transposition, rhythm adjustment). The four verified rows are `Navigate*` commands.
-- **Play (39 rows, 31 verified, 2 unavailable, 6 untested):** Transport and playhead controls, and the playback setup (activation, VST slots, endpoints, expression maps) driven by `playback_setup` and `activate_playback`. `Play.StartOrStop` accepts `PlayFromLocation` targets.
-- **Setup (10) and Project (11):** Structural operations (players, flows, layouts). `manage_flows` adds, renames and deletes flows; renaming and deleting need Setup mode.
+- **Play (40 rows, 32 verified, 1 reachable, 2 unavailable, 5 untested):** Transport and playhead controls, and the playback setup (activation, VST slots, endpoints, expression maps) driven by `playback_setup` and `activate_playback`. `Play.StartOrStop` accepts `PlayFromLocation` targets.
+- **Setup (10) and Project (12):** Structural operations (players, flows, layouts). `manage_flows` adds, renames and deletes flows and `rename_player` renames players; both need Setup mode for renaming and deleting.
 - **MusicalManipulation (6 rows, 6 verified):** Write > Transform on the selection. The three retrograde commands act directly; the three with inversion open a modal dialog a person must confirm. Dorico lists them as no key command.
 
 ## Musical Domain Layer (`music/`)
@@ -84,7 +84,7 @@ Category status distribution across the 367 catalog rows:
 
 ## MCP Interface (`server.py`)
 
-The server exposes 39 tools and the `dorico://commands` resource:
+The server exposes 40 tools and the `dorico://commands` resource:
 
 1. **Connection and State:** `connect_to_dorico`, `get_status`, `read_selection`.
 2. **Single-Command & Caret Tools:** `add_notes`, `add_rest`, `transpose`, `set_key_signature`, `set_time_signature`, `navigate`, `goto_bar`, `open_popover`, `playback`, `switch_mode`, `save`, `export_pdf`.
@@ -92,7 +92,7 @@ The server exposes 39 tools and the `dorico://commands` resource:
 4. **Offline Theory Tools:** `analyze_harmony`, `check_voice_leading`, `suggest_next_chord`, `instrument_range`, `check_counterpoint`.
 5. **Discovery & Generic Dispatch:** `search_commands`, `run_command`, and `dorico://commands` resource.
 6. **Playback Setup:** `playback_state`, `activate_playback`, `list_plugins`, `playback_setup`.
-7. **Project and Flows:** `project_file` (open, save as, close, revert), `manage_flows`, `add_marking`.
+7. **Project and Flows:** `project_file` (open, save as, close, revert), `manage_flows`, `rename_player`, `add_marking`.
 8. **Saved Project Files:** `read_playback_setup` and `plugin_state` read and patch `score.dtn` and the audio engine data offline (`dtn.py`, `enginedata.py`).
 
 Besides commands, the client sends the Remote API's read requests (`getappinfo`, `getcommands`, `getflows`, `getlibraryentities`, `getplaybacktechniques` and others, see `client.QUERY_REPLIES`). `connect_to_dorico` reports the edition, and `_run` refuses a command the running edition does not list. Tools whose effect Dorico's replies cannot show wait for its application log (`applog.py`): the finishing line of a command, the file a save wrote.

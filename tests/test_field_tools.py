@@ -294,3 +294,19 @@ async def test_a_change_refused_while_the_engine_syncs_is_sent_again(
     result = await server.playback_setup("enable_plugin", slot=2)
     assert result["success"] is True
     assert fake.sent == ["Play.EnablePlugin?SlotID=1&Value=1"] * 2
+
+
+async def test_a_player_is_renamed_in_setup_mode_and_the_mode_restored(fake: FakeClient) -> None:
+    await server.rename_player(0, "Klavier")
+    assert fake.sent == [
+        "Window.SwitchMode?WindowMode=kSetupMode",
+        "Project.Player.Rename?PlayerID=0&Name=Klavier",
+        "Window.SwitchMode?WindowMode=kWriteMode",
+    ]
+
+
+async def test_applying_a_template_needs_confirm(fake: FakeClient) -> None:
+    refused = await server.playback_setup("apply_template")
+    assert refused["success"] is False and fake.sent == []
+    await server.playback_setup("apply_template", confirm=True)
+    assert fake.sent == ["Play.ApplyPlaybackTemplate?PlaybackTemplateID=playbacktemplate.auto"]

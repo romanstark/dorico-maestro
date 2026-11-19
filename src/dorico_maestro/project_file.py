@@ -165,7 +165,8 @@ def read_playback_setup(path: str | Path) -> dict[str, Any]:
             "channels": [
                 {"channel": int(c.get("channelNumberRel0", 0)) + 1,
                  "expression_map": c.get("expressionMapID") or None,
-                 "program": c.get("programName") or None}
+                 "program": c.get("programName") or None,
+                 "preset_uri": c.get("halionPresetURI") or None}
                 for c in dtn.items(entry.get("programContents"))
             ],
             "engine_plugin": engine.name if engine else None,
@@ -188,7 +189,7 @@ def read_playback_setup(path: str | Path) -> dict[str, Any]:
     synced_text = (play.get("projectEngineState") or {}).get("syncedEndpoints") or ""
     synced = {int(x) for x in synced_text.split(",") if x.strip().isdigit()}
     names = {
-        i.get("instrumentID"): (pl.get("displayName"), i.get("entityID"))
+        i.get("instrumentID"): (pl.get("displayName"), i.get("entityID"), pl.get("playerID"))
         for pl in dtn.items(tree.get("scorePlayers")) for i in dtn.items(pl.get("instruments"))
     }
     instruments: list[dict[str, Any]] = []
@@ -198,10 +199,11 @@ def read_playback_setup(path: str | Path) -> dict[str, Any]:
             int(t.get("endpointID", -1))
             for v in dtn.items(entry.get("voiceData")) for t in dtn.items(v.get("techniqueTracks"))
         } - {-1})
-        player, entity = names.get(iid, (None, entry.get("instrumentEntityID")))
+        player, entity, player_id = names.get(iid, (None, entry.get("instrumentEntityID"), None))
         instruments.append({
             "instrument_id": int(iid) if str(iid).isdigit() else iid,
             "player": player,
+            "player_id": int(player_id) if str(player_id).isdigit() else None,
             "instrument": entity,
             "routes": [{"endpoint": e, "slot": e // ENDPOINT_STRIDE + 1,
                         "channel": e % ENDPOINT_STRIDE + 1} for e in endpoints],

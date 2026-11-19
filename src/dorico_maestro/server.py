@@ -3,7 +3,7 @@
 This module provides the MCP interface described in docs/architecture.md:
 intent-focused tools (add notes, transpose, playback), a generic run_command
 escape hatch, and a dorico://commands resource enabling discovery of the
-367 catalogued commands without per-command tool declarations.
+369 catalogued commands without per-command tool declarations.
 
 Single-command tools route through dorico_maestro.executor.execute against the
 shared default registry. Caret and note input tools drive NoteInputSession or
@@ -1266,14 +1266,14 @@ def list_plugins(
 async def playback_setup(
     action: Annotated[
         Literal["load_plugin", "remove_plugin", "enable_plugin", "disable_plugin", "route",
-                "set_expression_map"],
+                "set_expression_map", "apply_template"],
         Field(description="What to change in the playback setup."),
     ],
     slot: Annotated[
         int,
         Field(ge=2, description="VST instrument slot as Dorico's window numbers it; slot 1 is "
-              "Dorico's click, so the first usable slot is 2."),
-    ],
+              "Dorico's click, so the first usable slot is 2. Ignored by apply_template."),
+    ] = 2,
     plugin: Annotated[
         str,
         Field(description="load_plugin: plugin name or 32-digit class id, see list_plugins."),
@@ -1289,6 +1289,11 @@ async def playback_setup(
         str,
         Field(description="set_expression_map: map id (xmap.…) or name, see playback_state."),
     ] = "",
+    template: Annotated[
+        str,
+        Field(description="apply_template: playback template id; the default is Dorico's "
+              "automatic one."),
+    ] = "playbacktemplate.auto",
     confirm: ConfirmArg = False,
 ) -> dict[str, Any]:
     """Change VST slots, an instrument's routing, or an expression map.
@@ -1309,10 +1314,14 @@ async def playback_setup(
         "slot is already occupied by the same plugin" even for a load that worked,
         so that line is no failure signal. Removing a slot needs ``confirm=True``.
 
+        ``apply_template`` rebuilds the whole setup from a playback template: it
+        reloads the template's sounds and resets routing and expression maps, so it
+        needs ``confirm=True``.
+
         An instrument id that does not exist is answered with kOK and changes
-        nothing, and no query lists the ids. ``verified`` is True only when Dorico's
-        log shows the MIDI thru endpoint moving, which happens for the instrument
-        Dorico monitors; otherwise it is None, not False.
+        nothing; read_playback_setup lists the ids of a saved project. ``verified`` is
+        True only when Dorico's log shows the MIDI thru endpoint moving, which happens
+        for the instrument Dorico monitors; otherwise it is None, not False.
     """
     client = _client_instance()
     try:
@@ -1334,6 +1343,12 @@ async def playback_setup(
                                      "categories": p.categories} for p in found[:20]]}
             command = f"Play.LoadPlugin?SlotID={sid}&VSTPluginID={found[0].class_id}"
             notes.append("A plugin already in this slot was replaced and its routings dropped.")
+        elif action == "apply_template":
+            if not confirm:
+                return {"success": False, "error": "a template resets routing and expression "
+                        "maps; pass confirm=True"}
+            command = ("Play.ApplyPlaybackTemplate?PlaybackTemplateID="
+                       + playsetup.value(template))
         elif action == "remove_plugin":
             if not confirm:
                 return {"success": False, "error": "removing a slot drops its routings; "
@@ -1463,6 +1478,38 @@ async def manage_flows(
         return out
     except (DoricoConnectionError, ValueError, TimeoutError) as e:
         return {"success": False, "error": str(e) or "Dorico did not answer in time"}
+
+
+@mcp.tool(annotations=SETS)
+async def rename_player(
+    player: Annotated[int, Field(ge=0, description="Player id, see read_playback_setup.")],
+    name: Annotated[str, Field(description="The new name.")],
+) -> dict[str, Any]:
+    """Rename a player by id.
+
+    Returns:
+        Result dictionary with the command and whether Dorico finished it.
+
+    Note:
+        Refused in Write mode, so this switches to Setup mode and back (Dorico
+        Elements 6.2.40). No query lists players; their ids come from a saved project
+        through read_playback_setup. Deleting a player by id is not possible: Dorico's
+        command acts on the selection in Setup mode.
+    """
+    client = _client_instance()
+    try:
+        await client.connect()
+        command = f"Project.Player.Rename?PlayerID={player}&Name={playsetup.value(name.strip())}"
+        mode = (await client.fresh_status()).get("windowMode") or "kWriteMode"
+        await client.send("Window.SwitchMode?WindowMode=kSetupMode")
+        try:
+            out = await _watched(client, command, 15.0)
+        finally:
+            await client.send(f"Window.SwitchMode?WindowMode={mode}")
+    except (DoricoConnectionError, ValueError, TimeoutError) as e:
+        return {"success": False, "error": str(e) or "Dorico did not answer in time"}
+    out.pop("log", None)
+    return out
 
 
 # ------------------------------------------------------------------------ markings
@@ -2043,7 +2090,7 @@ def read_playback_setup(
     Note:
         Offline and read-only; for the open project, save first. ``instrument_id`` is
         the id playback_setup(action='route') needs. A problem such as "Dorico lists
-        Opus, the audio engine hosts HALion Sonic" means the slot will not sound as
+        a sampler, the audio engine hosts HALion Sonic" means the slot will not sound as
         shown, which pushed status cannot reveal (Dorico Elements 6.2.40).
     """
     return savedfile.read_playback_setup(path)
@@ -2610,7 +2657,7 @@ def search_commands(
 def commands_catalog() -> str:
     """Return the complete Dorico command catalog formatted as JSON.
 
-    Exposes all 367 commands with metadata, parameter signatures, and verification
+    Exposes all 369 commands with metadata, parameter signatures, and verification
     status without requiring individual tool declarations.
     """
     try:

@@ -1457,13 +1457,13 @@
     doc: "Set the expression map (library entity id, xmap.*) of an endpoint; read back with getplaybacktechniques on a selection."
   - id: "Play.LoadPluginPreset"
     category: Play
-    status: untested
+    status: reachable
     params:
       - {name: slot_id, dorico: SlotID, kind: int, required: true}
       - {name: midi_port, dorico: MIDIPort, kind: int, required: true}
       - {name: midi_channel, dorico: MIDIChannel, kind: int, required: true}
       - {name: preset_uri, dorico: PresetURI, required: true}
-    doc: "Accepts a .vstpreset path with kOK; whether it loads the whole state was not established in one probe."
+    doc: "Answers kOK and records PresetURI as the channel's preset in the project, but loads nothing: the plugin kept its program, also after reactivating (Dorico Elements 6.2.40). A '?' inside the URI must be sent as \\?. Use plugin_state for a slot's state."
   - id: "Project.Flow.Rename"
     category: Project
     status: verified
@@ -1486,3 +1486,12 @@
     category: Project
     status: untested
     doc: "Accepted (kOK); whether it moves the selection to the next proofreading result was not distinguishable in one probe."
+  - id: "Play.ApplyPlaybackTemplate"
+    category: Play
+    status: verified
+    destructive: true
+    doc: "Rebuild the playback setup from a template (PlaybackTemplateID, e.g. playbacktemplate.auto): reloads its sounds and resets routing and expression maps. Use playback_setup(action='apply_template')."
+  - id: "Project.Player.Rename"
+    category: Project
+    status: verified
+    doc: "Rename a player (PlayerID, Name). kCommandNotAllowed in Write mode; works in Setup mode. Use rename_player."
