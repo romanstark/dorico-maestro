@@ -72,3 +72,27 @@ def _message(line: str) -> str:
     if "] " in text:
         return text.split("] ", 1)[1]
     return text
+
+
+def open_projects(path: Path | None = None) -> set[str]:
+    """Return the project files Dorico has open, from its document session lines."""
+    log = path if path is not None else log_path()
+    if log is None:
+        return set()
+    documents: dict[str, str] = {}
+    opening = command = ""
+    with log.open(encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            text = _message(line)
+            if text.startswith("Executing command: "):
+                command = text[len("Executing command: "):].split("?", 1)[0]
+            elif text.startswith("========== Opening file: "):
+                opening = text[len("========== Opening file: "):]
+            elif text.startswith("Creating document session: "):
+                documents[text.rsplit(" ", 1)[1]] = opening
+            elif text.startswith("Saving document: ") and command == "File.SaveAs":
+                number, target = text[len("Saving document: "):].split(" to ", 1)
+                documents[number] = target
+            elif text.startswith("Closing document session: "):
+                documents.pop(text.rsplit(" ", 1)[1], None)
+    return {str(Path(p).resolve()) for p in documents.values() if p}

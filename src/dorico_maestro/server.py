@@ -31,8 +31,9 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from dorico_maestro import playback as playsetup
+from dorico_maestro import project_file as savedfile
 from dorico_maestro import render
-from dorico_maestro.applog import LogWatch
+from dorico_maestro.applog import LogWatch, open_projects
 from dorico_maestro.client import DoricoClient, DoricoConnectionError
 from dorico_maestro.executor import Result, execute
 from dorico_maestro.models import CmdStatus, NoteDuration
@@ -1279,8 +1280,7 @@ async def playback_setup(
     ] = "",
     instrument: Annotated[
         int | None,
-        Field(ge=0, description="route: Dorico's instrument id; the first instrument of a "
-              "project is 0."),
+        Field(ge=0, description="route: Dorico's instrument id, see read_playback_setup."),
     ] = None,
     channel: Annotated[
         int, Field(ge=1, le=16, description="route and set_expression_map: MIDI channel.")
@@ -1301,7 +1301,8 @@ async def playback_setup(
     Note:
         Measured in Dorico Elements 6.2.40 on a test project. The project must be
         activated for playback, or a load is refused with ``kCommandNotAllowed``.
-        Endpoint = 1024 × (slot − 1) + channel − 1, so slot 2 channel 1 is 1024.
+        Endpoint = 1024 × (slot − 1) + channel − 1, so slot 2 channel 1 is 1024; a slot
+        that was replaced can leave instruments elsewhere, which read_playback_setup shows.
 
         Loading into a slot that holds a plugin replaces it, and the instruments
         routed to it lose their routing silently: route them again. Dorico logs
@@ -2027,6 +2028,54 @@ def read_project_info(
         selection.
     """
     return _read_project_info(path)
+
+
+@mcp.tool(annotations=READS)
+def read_playback_setup(
+    path: Annotated[str, Field(description="A saved .dorico project, autosaves included.")],
+) -> dict[str, Any]:
+    """Read a saved project's VST slots, routing and expression maps, and check them.
+
+    Returns:
+        Result dictionary with ``slots`` (Dorico's rack beside what the audio engine
+        hosts), ``instruments`` (player, ``instrument_id`` and routes) and ``problems``.
+
+    Note:
+        Offline and read-only; for the open project, save first. ``instrument_id`` is
+        the id playback_setup(action='route') needs. A problem such as "Dorico lists
+        Opus, the audio engine hosts HALion Sonic" means the slot will not sound as
+        shown, which pushed status cannot reveal (Dorico Elements 6.2.40).
+    """
+    return savedfile.read_playback_setup(path)
+
+
+@mcp.tool(annotations=DESTROYS)
+def plugin_state(
+    action: Annotated[
+        Literal["export", "import"],
+        Field(description="export a slot's saved state as .vstpreset, or import one."),
+    ],
+    path: Annotated[str, Field(description="A saved .dorico project.")],
+    slot: Annotated[int, Field(ge=1, description="Slot as Dorico's window numbers it.")],
+    preset_path: Annotated[str, Field(description="The .vstpreset file to write or read.")],
+    confirm: ConfirmArg = False,
+) -> dict[str, Any]:
+    """Export or replace the saved state of a VST instrument slot in a closed project.
+
+    Returns:
+        Result dictionary with the slot, the preset file and, for import, the backup.
+
+    Note:
+        Sets what a plugin holds (programs, instruments on channels) without its
+        window, which no assistant can operate. Import refuses a preset made for
+        another plugin and a project Dorico has open, writes a backup next to the
+        project first and tests the rewritten file. It needs ``confirm=True``.
+    """
+    if action == "export":
+        return savedfile.export_plugin_state(path, slot, preset_path)
+    if not confirm:
+        return {"success": False, "error": "import rewrites the project file; pass confirm=True"}
+    return savedfile.import_plugin_state(path, slot, preset_path, open_projects())
 
 
 @mcp.tool(annotations=READS)

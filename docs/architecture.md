@@ -84,7 +84,7 @@ Category status distribution across the 367 catalog rows:
 
 ## MCP Interface (`server.py`)
 
-The server exposes 37 tools and the `dorico://commands` resource:
+The server exposes 39 tools and the `dorico://commands` resource:
 
 1. **Connection and State:** `connect_to_dorico`, `get_status`, `read_selection`.
 2. **Single-Command & Caret Tools:** `add_notes`, `add_rest`, `transpose`, `set_key_signature`, `set_time_signature`, `navigate`, `goto_bar`, `open_popover`, `playback`, `switch_mode`, `save`, `export_pdf`.
@@ -93,6 +93,7 @@ The server exposes 37 tools and the `dorico://commands` resource:
 5. **Discovery & Generic Dispatch:** `search_commands`, `run_command`, and `dorico://commands` resource.
 6. **Playback Setup:** `playback_state`, `activate_playback`, `list_plugins`, `playback_setup`.
 7. **Project and Flows:** `project_file` (open, save as, close, revert), `manage_flows`, `add_marking`.
+8. **Saved Project Files:** `read_playback_setup` and `plugin_state` read and patch `score.dtn` and the audio engine data offline (`dtn.py`, `enginedata.py`).
 
 Besides commands, the client sends the Remote API's read requests (`getappinfo`, `getcommands`, `getflows`, `getlibraryentities`, `getplaybacktechniques` and others, see `client.QUERY_REPLIES`). `connect_to_dorico` reports the edition, and `_run` refuses a command the running edition does not list. Tools whose effect Dorico's replies cannot show wait for its application log (`applog.py`): the finishing line of a command, the file a save wrote.
 

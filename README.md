@@ -65,6 +65,7 @@ Here is what collaborating with Maestro looks like during a scoring session:
 | **📖 Reading Your Open Score** | *"Read the score I have open, then add a viola line that fits"* | Inspects the active flow via one-click MusicXML export to extract key, meter, bar count, and upbeat presence for exact subsequent caret operations |
 | **🎻 Playback Setup** | *"Load a sampler into slot 3, put the violas on channel 3 and give them the keyswitch expression map"* | Activates playback, loads and removes VST instruments, routes instruments to channels and sets expression maps, reading back what Dorico took |
 | **𝆏 Dynamics & Tempo at a Bar** | *"Put an mf in bar 12 of the cellos and q = 70 at bar 41"* | Places the caret and writes the marking directly, no popover to type into |
+| **🩺 Playback Check & Plugin State** | *"Why is the viola silent? Check the saved project, then put this preset into slot 2"* | Compares Dorico's rack with what the audio engine really hosts, finds instruments routed to empty slots, and sets a slot's plugin state in a closed project, with a backup |
 | **🗂️ Flows & Project Files** | *"Delete the flow the last import added, then save and wait until the file is written"* | Lists, renames and deletes flows, opens, saves as, closes and reverts projects, and reports when the file on disk is complete |
 | **🔄 Enharmonic & Transpose** | *"Transpose selected notes up a whole tone and respell using sharps"* | Dispatches diatonic/chromatic transpositions and enharmonic respelling |
 
@@ -142,7 +143,7 @@ Dorico's Remote Control API is powerful, but certain tasks are intentionally res
 | Task | Why | How to do it |
 |---|---|---|
 | **Typing into Popovers** | Remote API opens popovers (Shift+D, Shift+T, etc.) but cannot type text into them | Dynamics and tempo go in directly with `add_marking`; for other popovers Maestro opens them and tells you the exact value, or use `write_score(method="musicxml")` |
-| **Plugin Windows** | A sampler's own window belongs to Dorico's audio engine, which no assistant can operate | Load and route instruments with Maestro, then pick the sounds inside the plugin yourself |
+| **Plugin Windows** | A sampler's own window belongs to Dorico's audio engine, which no assistant can operate | Load and route instruments with Maestro; to set sounds without the window, export a slot's state from a project where it is right and import it into the closed project with `plugin_state` |
 | **Confirming Deletions** | Deleting a flow and reverting a project ask for confirmation in Dorico | Click OK in Dorico; Maestro waits and reports the result |
 | **Modal Dialog Confirmation** | Dorico requires manual confirmation for file open and export dialogs | Press Enter on the export prompt once, and `read_open_score` automatically ingests the resulting MusicXML (use `export_pdf` for unattended PDF export) |
 | **Initial Connection Approval** | Dorico security model requires one-time user authorization | Click **Authorize** on the Dorico permission prompt on first run |
@@ -171,7 +172,7 @@ The remaining 11 categories are currently untested.
 ### Testing & Environment
 Empirical testing was conducted against **Dorico Elements 6.2.30 and 6.2.40** on Windows 11 and macOS. Dorico restricts commands depending on product tier (SE, Elements, Pro). Commands requiring Pro (such as Lua scripting) return `kUnknownCommand` and are classified as `unavailable` rather than `broken`.
 
-Dorico Maestro exposes **37 tools** and one resource (`dorico://commands`) for complete command discovery.
+Dorico Maestro exposes **39 tools** and one resource (`dorico://commands`) for complete command discovery.
 
 ### A note to Steinberg (and Dorico Pro users)
 
