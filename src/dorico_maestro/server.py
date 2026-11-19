@@ -33,7 +33,7 @@ from pydantic import Field
 from dorico_maestro import playback as playsetup
 from dorico_maestro import project_file as savedfile
 from dorico_maestro import render
-from dorico_maestro.applog import LogWatch, open_projects
+from dorico_maestro.applog import LogWatch, log_path, open_projects
 from dorico_maestro.client import DoricoClient, DoricoConnectionError
 from dorico_maestro.executor import Result, execute
 from dorico_maestro.models import CmdStatus, NoteDuration
@@ -2106,6 +2106,11 @@ def plugin_state(
     slot: Annotated[int, Field(ge=1, description="Slot as Dorico's window numbers it.")],
     preset_path: Annotated[str, Field(description="The .vstpreset file to write or read.")],
     confirm: ConfirmArg = False,
+    dorico_closed: Annotated[
+        bool,
+        Field(description="import: True states that Dorico does not have the project open; "
+              "needed only where Dorico's application log cannot be read."),
+    ] = False,
 ) -> dict[str, Any]:
     """Export or replace the saved state of a VST instrument slot in a closed project.
 
@@ -2116,12 +2121,18 @@ def plugin_state(
         Sets what a plugin holds (programs, instruments on channels) without its
         window, which no assistant can operate. Import refuses a preset made for
         another plugin and a project Dorico has open, writes a backup next to the
-        project first and tests the rewritten file. It needs ``confirm=True``.
+        project first and tests the rewritten file. It needs ``confirm=True``. Whether
+        the project is open comes from Dorico's application log; without one the import
+        is refused unless ``dorico_closed=True``.
     """
     if action == "export":
         return savedfile.export_plugin_state(path, slot, preset_path)
     if not confirm:
         return {"success": False, "error": "import rewrites the project file; pass confirm=True"}
+    if log_path() is None and not dorico_closed:
+        return {"success": False, "error": "Dorico's application log is not readable here, so "
+                "an open project cannot be ruled out; close it in Dorico and pass "
+                "dorico_closed=True"}
     return savedfile.import_plugin_state(path, slot, preset_path, open_projects())
 
 

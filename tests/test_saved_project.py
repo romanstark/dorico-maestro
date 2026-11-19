@@ -192,3 +192,19 @@ def test_open_projects_follow_document_sessions(tmp_path: Path) -> None:
         "Closing document session: 0",
     )), encoding="utf-8")
     assert applog.open_projects(log) == {str(Path("/a/three.dorico").resolve())}
+
+
+def test_an_import_without_a_readable_log_needs_the_caller_to_vouch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dorico_maestro import server
+
+    path = make_project(tmp_path / "p.dorico", {"5": "1024"})
+    state = tmp_path / "s.vstpreset"
+    state.write_bytes(preset(SAMPLER))
+    monkeypatch.setattr(server, "log_path", lambda: None)
+    refused = server.plugin_state("import", str(path), 2, str(state), confirm=True)
+    assert refused["success"] is False and "dorico_closed" in refused["error"]
+    done = server.plugin_state("import", str(path), 2, str(state), confirm=True,
+                               dorico_closed=True)
+    assert done["success"] is True, done
