@@ -84,7 +84,7 @@ The 22 command namespaces in Dorico 6 (340 base key-bindable commands):
 | `Video` | 1 | Video window display |
 | **Total** | **340** | Base key-command catalog |
 
-`src/dorico_maestro/commands.yaml` contains 354 commands: the 340 base IDs, four parameterized base commands (`NoteInput.Pitch`, `NoteInput.SetAccidental`, `Play.StartOrStop`, `Window.SwitchMode`), four binary export commands (`File.Export`, `File.Export?FilterID=MusicXMLExportFilter`, `Print.ExportCurrentLayoutAsPDF`, `Print.ExportAllLayoutsAsPDF`), and six `MusicalManipulation` menu commands (retrograde and inversion).
+`src/dorico_maestro/commands.yaml` contains 367 commands: the 340 base IDs, four parameterized base commands (`NoteInput.Pitch`, `NoteInput.SetAccidental`, `Play.StartOrStop`, `Window.SwitchMode`), four binary export commands (`File.Export`, `File.Export?FilterID=MusicXMLExportFilter`, `Print.ExportCurrentLayoutAsPDF`, `Print.ExportAllLayoutsAsPDF`), and six `MusicalManipulation` menu commands (retrograde and inversion).
 Catalog status distribution: 190 verified, 23 reachable, 4 unavailable, 0 broken, 131 untested.
 
 ### Verified Core Commands (Dorico 6)
@@ -130,6 +130,17 @@ Catalog status distribution: 190 verified, 23 reachable, 4 unavailable, 0 broken
   Because Dorico does not expose caret coordinates via the Remote Control API, `goto_bar` deterministically repositions the caret: it jumps to the flow start with the sequence above, then steps forward (`NoteInput.MoveRightBar`, `NoteInput.MoveDown`, and `NoteInput.MoveRight`). The jump costs the same four commands at any distance, so no caller has to know how long the flow is and there is no length beyond which positioning degrades. Whether `MoveRightBar` clamps at the end of the flow the way `MoveLeftBar` clamps at its start has not been established.
 - **Dynamics and Articulations:**
   `EventEdit.*` commands operate only on existing selections. Articulations are applied via `NoteInput.SetArticulation?Value=...`. Dynamics are entered by opening the dynamic popover (`NoteInput.CreateDynamic`).
+
+- **Read Requests Besides Commands:**
+  The Remote API answers `getappinfo` (`info: version` gives `variant` and `number`, e.g. `Elements`, `6.2.40`), `getcommands` (every command the edition offers, with required and optional parameters), `getflows`, `getlayouts`, `getproperties` (selection only), `getlibrarycollections`, `getlibraryentities` (e.g. expression map ids) and `getplaybacktechniques` (the expression maps of the selected instruments). Without an active project window a request is answered with a plain `response` carrying `kNoScore`, in FIFO order with command replies *(Dorico Elements 6.2.40)*.
+- **Playback Setup:**
+  `Play.ActivateProject` toggles: sent to an active project it deactivates it. `Play.LoadPlugin` is refused with `kCommandNotAllowed` until the project is activated. `SlotID` is 0-based while the window numbers slots from 1, and slot 1 is the click. An endpoint is `1024 × SlotID + channel − 1`. `Play.SetEndpoint` with an instrument id that does not exist answers `kOK` and changes nothing. Each change pushes `playbackconfigurationchanged` without a payload. While the audio engine syncs a change (`Syncing Audio Engine` to `Sync complete` in the application log) further playback changes are refused with `kCommandNotAllowed`; the same commands a few seconds apart all apply, so `playback_setup` sends a refused change again for up to ten seconds. The audio engine's plugin cache can list two instrument classes under one name: HALion Sonic 7.5 registers the full instrument (`Instrument|Synth|Sampler`) and a content player (`ContentPlayer`) as "HALion Sonic", next to content players such as Symphonic Orchestra; `playback_setup` takes the full instrument for an exact name *(Dorico Elements 6.2.40)*.
+- **Popover Commands With a Definition:**
+  `NoteInput.CreateDynamic?Definition=mf` creates the dynamic at the caret without opening the popover and leaves it selected (`kDynamicGroupEvent`); `NoteInput.CreateTempo?Definition=q = 60` does the same for a tempo (`kImmediateTempoChangeEvent`), though the status first reads `kMixed` for a moment *(Dorico Elements 6.2.40)*.
+- **Flows and Project Files:**
+  `Project.Flow.Rename` and `Project.Flows.Delete` answer `kCommandNotAllowed` in Write mode and work in Setup mode; deleting opens a confirmation dialog. `File.SaveAs?File=<path>` and `File.CloseProject?OpenScoreID=<id>&Save=false` run without a dialog; `File.Revert` asks first and reopens the project under a new `openScoreID`. `File.Save` answers before the file is written, and `Notify=true` adds no message; Dorico's application log records `notifyPostCommandExecute` when a command has finished *(Dorico Elements 6.2.40)*.
+- **Command Values:**
+  Dorico logs a comma inside a value as `\,` (e.g. `Position=32\, 1`). A value containing `&`, `?` or `#` cannot be sent *(Dorico Elements 6.2.40)*.
 
 ## References
 

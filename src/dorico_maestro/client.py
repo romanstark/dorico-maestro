@@ -30,6 +30,18 @@ DEFAULT_PORTS = (4560, 4561, 4562, 4563, 4564, 4565)
 HANDSHAKE_VERSION = "1.0"
 ERROR_CODES = {"kError", "kUnknownCommand", "kInvalidCommand", "kFail"}
 
+# Read request -> reply message type (errors come back as a plain response).
+QUERY_REPLIES: dict[str, str] = {
+    "getappinfo": "version",
+    "getcommands": "commandlist",
+    "getflows": "flowslist",
+    "getlayouts": "layoutslist",
+    "getproperties": "propertieslist",
+    "getlibrarycollections": "librarycollectionslist",
+    "getlibraryentities": "libraryentitieslist",
+    "getplaybacktechniques": "playbacktechniqueslist",
+}
+
 
 class DoricoConnectionError(Exception):
     """Raised when a connection to Dorico cannot be established."""
@@ -90,6 +102,10 @@ class DoricoClient:
         self._handshake = asyncio.Event()
         self._handshake_error: str | None = None
         self._recv_task: asyncio.Task[None] | None = None
+        self._queries: dict[str, deque[asyncio.Future[Response]]] = {}
+        self.notifications: dict[str, int] = {}
+        self._edition: dict[str, Any] | None = None
+        self._commands: dict[str, dict[str, list[str]]] | None = None
 
     # ------------------------------------------------------------------ state
     @property
@@ -147,6 +163,8 @@ class DoricoClient:
             await self._ws.close()
             self._ws = None
         self._state = ConnectionState.DISCONNECTED
+        self._edition = None
+        self._commands = None
 
     async def __aenter__(self) -> Self:
         await self.connect()
@@ -178,6 +196,63 @@ class DoricoClient:
                 pass
             raise
 
+    async def query(self, message: str, timeout: float = 5.0, **fields: Any) -> Response:
+        """Send a read request (e.g. getflows) and await its reply."""
+        reply = QUERY_REPLIES[message]
+        if not self.connected:
+            await self.connect()
+        if self._ws is None:
+            raise DoricoConnectionError("Not connected")
+        fut: asyncio.Future[Response] = asyncio.get_running_loop().create_future()
+        self._pending.append(fut)  # an error reply arrives FIFO like command replies
+        self._queries.setdefault(reply, deque()).append(fut)
+        try:
+            await self._ws.send(json.dumps({"message": message, **fields}))
+            return await asyncio.wait_for(fut, timeout)
+        finally:
+            self._forget(fut)
+
+    async def edition(self) -> dict[str, Any]:
+        """Return Dorico's edition and version, cached per connection."""
+        if self._edition is None:
+            try:
+                reply = await self.query("getappinfo", info="version")
+            except TimeoutError:
+                reply = Response(ok=False, code="kTimeout")
+            data = reply.data or {}
+            self._edition = {k: data[k] for k in ("variant", "number") if k in data}
+        return dict(self._edition)
+
+    async def commands(self) -> dict[str, dict[str, list[str]]]:
+        """Return the commands this Dorico offers with their parameters, cached."""
+        if self._commands is None:
+            try:
+                reply = await self.query("getcommands", timeout=15.0)
+            except TimeoutError:
+                reply = Response(ok=False, code="kTimeout")
+            rows = (reply.data or {}).get("commands") or []
+            self._commands = {
+                str(row["name"]): {
+                    "required": list(row.get("requiredParameters") or []),
+                    "optional": list(row.get("optionalParameters") or []),
+                }
+                for row in rows
+                if isinstance(row, dict) and "name" in row
+            }
+        return self._commands
+
+    def _forget(self, fut: asyncio.Future[Response]) -> None:
+        """Drop a finished request from both reply queues."""
+        try:
+            self._pending.remove(fut)
+        except ValueError:
+            pass
+        for waiting in self._queries.values():
+            try:
+                waiting.remove(fut)
+            except ValueError:
+                pass
+
     async def send_many(self, commands: list[str]) -> list[Response]:
         """Send commands in order, stopping at the first failure."""
         out: list[Response] = []
@@ -189,13 +264,7 @@ class DoricoClient:
         return out
 
     async def fresh_status(self, wait: float = 2.0) -> dict[str, Any]:
-        """Ask Dorico for its whole status now and return the merged snapshot.
-
-        The pushed deltas are not complete: within one connection Dorico pushes
-        restMode turning on but not turning off, so the pushed snapshot keeps
-        saying true. A ``getstatus`` request answers with the current values
-        (Dorico Elements 6.2.30). Falls back to the pushed snapshot on timeout.
-        """
+        """Request the full status now; pushed deltas miss some changes."""
         if not self.connected:
             await self.connect()
         if self._ws is None:
@@ -243,10 +312,7 @@ class DoricoClient:
             msg["sessionToken"] = token
         self._state = ConnectionState.AWAITING_APPROVAL
         await self._ws.send(json.dumps(msg))
-        # A valid saved token is answered at once. A stale one (the client was
-        # removed in Dorico's Remote preferences) is not answered at all, so wait
-        # briefly, then forget it and ask again without one: that brings up the
-        # approval prompt instead of hanging.
+        # A stale token gets no answer: wait briefly, then retry without it.
         wait = self.stale_token_timeout if token else self.approval_timeout
         try:
             await asyncio.wait_for(self._handshake.wait(), wait)
@@ -310,7 +376,13 @@ class DoricoClient:
         elif mtype == "status":
             self._status.update(data)  # deltas -> merge
             self._status_event.set()
-        # selectionchanged / documentchanged / playback* -> not handled yet
+        elif self._queries.get(mtype):
+            fut = self._queries[mtype].popleft()
+            self._forget(fut)
+            if not fut.done():
+                fut.set_result(Response(ok=True, code="kOK", data=data))
+        elif isinstance(mtype, str):
+            self.notifications[mtype] = self.notifications.get(mtype, 0) + 1
 
     def _handle_response(self, data: dict[str, Any]) -> None:
         code = data.get("code")
@@ -326,6 +398,7 @@ class DoricoClient:
         is_err = code in ERROR_CODES or data.get("detail") in ERROR_CODES
         if self._pending:
             fut = self._pending.popleft()
+            self._forget(fut)
             if not fut.done():
                 fut.set_result(
                     Response(

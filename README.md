@@ -63,6 +63,9 @@ Here is what collaborating with Maestro looks like during a scoring session:
 | **🖨️ Engraving & Layout** | *"Switch to Print mode and export the full score layout as PDF"* | Navigates Dorico modes, switches views, and runs unattended PDF exports |
 | **📂 Offline Project Inspection** | *"Read the flows, players, and metadata from this .dorico file"* | Inspects `.dorico` project archives directly on disk without launching Dorico |
 | **📖 Reading Your Open Score** | *"Read the score I have open, then add a viola line that fits"* | Inspects the active flow via one-click MusicXML export to extract key, meter, bar count, and upbeat presence for exact subsequent caret operations |
+| **🎻 Playback Setup** | *"Load a sampler into slot 3, put the violas on channel 3 and give them the keyswitch expression map"* | Activates playback, loads and removes VST instruments, routes instruments to channels and sets expression maps, reading back what Dorico took |
+| **𝆏 Dynamics & Tempo at a Bar** | *"Put an mf in bar 12 of the cellos and q = 70 at bar 41"* | Places the caret and writes the marking directly, no popover to type into |
+| **🗂️ Flows & Project Files** | *"Delete the flow the last import added, then save and wait until the file is written"* | Lists, renames and deletes flows, opens, saves as, closes and reverts projects, and reports when the file on disk is complete |
 | **🔄 Enharmonic & Transpose** | *"Transpose selected notes up a whole tone and respell using sharps"* | Dispatches diatonic/chromatic transpositions and enharmonic respelling |
 
 ---
@@ -75,7 +78,7 @@ Dorico Maestro is built on a **robust, safety-first architecture**:
 - **Lifecycle & Caret Safety:** Note input commands use strict session context managers (`try ... finally: NoteInput.Exit`). Even if an operation fails or arguments are malformed, Dorico is never left stranded in an open note-input state.
 - **Destructive Command Guard:** Commands that could discard musical work (`Edit.Delete`, `File.Close`, `File.Quit`) are automatically blocked unless explicitly authorized with `confirm=True`.
 - **Overwrite Mode Transparency:** Because Dorico defaults to Overwrite mode and the Remote Control API cannot read bar contents back, Maestro monitors `noteInputMode` and flags `displaces_existing: true` in its response whenever notes land in Overwrite mode.
-- **Data-Driven & Verified:** Built on a comprehensive catalog of 354 commands, with **196 of 354** commands verified live against Dorico 6.
+- **Data-Driven & Verified:** Built on a comprehensive catalog of 367 commands, with **196 of 354** commands verified live against Dorico 6.
 - **Dual Writing Paths:** Offers direct live caret input for fast interactive editing, and native MusicXML generation powered by music21 for complete multi-voice orchestral scores.
 
 ---
@@ -138,7 +141,9 @@ Dorico's Remote Control API is powerful, but certain tasks are intentionally res
 
 | Task | Why | How to do it |
 |---|---|---|
-| **Typing into Popovers** | Remote API opens popovers (Shift+D, Shift+T, etc.) but cannot type text into them | Maestro opens the popover and tells you the exact value; you press Enter, or use `write_score(method="musicxml")` |
+| **Typing into Popovers** | Remote API opens popovers (Shift+D, Shift+T, etc.) but cannot type text into them | Dynamics and tempo go in directly with `add_marking`; for other popovers Maestro opens them and tells you the exact value, or use `write_score(method="musicxml")` |
+| **Plugin Windows** | A sampler's own window belongs to Dorico's audio engine, which no assistant can operate | Load and route instruments with Maestro, then pick the sounds inside the plugin yourself |
+| **Confirming Deletions** | Deleting a flow and reverting a project ask for confirmation in Dorico | Click OK in Dorico; Maestro waits and reports the result |
 | **Modal Dialog Confirmation** | Dorico requires manual confirmation for file open and export dialogs | Press Enter on the export prompt once, and `read_open_score` automatically ingests the resulting MusicXML (use `export_pdf` for unattended PDF export) |
 | **Initial Connection Approval** | Dorico security model requires one-time user authorization | Click **Authorize** on the Dorico permission prompt on first run |
 | **Artistic Judgment** | AI can check rules and draft parts, but musical intent and taste belong to you | Guide the score, listen to playback, and refine the music |
@@ -147,25 +152,26 @@ Dorico's Remote Control API is powerful, but certain tasks are intentionally res
 
 ## Current Verification Status
 
-Verified live (196 commands), grouped by category:
+Verified live (209 commands), grouped by category:
 - `NoteInput` 101 of 125: Pitches, durations, accidentals, articulations, chords, tuplets, and popovers.
 - `Window` 26 of 29: Window modes, layout views, panels, toolbar, and zoom controls.
-- `Play` 24 of 31: Transport commands, playhead placement, and mixer controls.
+- `Play` 31 of 39: Transport, playhead placement, mixer controls, and the playback setup: activating, loading and removing VST instruments, routing, expression maps.
 - `View` 13 of 16: Viewport scrolling and zoom operations.
 - `NoteEdit` 8 of 8: Diatonic, chromatic, and octave transposition, plus enharmonic respelling.
-- `Edit` 6 of 16: Selection, copy, delete, and undo operations.
+- `Edit` 6 of 17: Selection, copy, delete, and undo operations.
 - `EventEdit` 4 of 57: Selection navigation commands (`Navigate*`).
-- `File` 4 of 11: Project save and MusicXML import/export filters.
+- `File` 7 of 12: Save, save as, close and revert, and MusicXML import/export filters.
 - `UI` 3 of 7: Panel focusing commands.
 - `Print` 1 of 7: Unattended PDF export (`Print.ExportCurrentLayoutAsPDF`).
+- `Project` 3 of 11: Adding, renaming and deleting flows.
 - `MusicalManipulation` 6 of 6: Retrograde of pitches, rhythm or both; the inversion commands open a dialog to confirm.
 
-The remaining 12 categories are currently untested.
+The remaining 11 categories are currently untested.
 
 ### Testing & Environment
-Empirical testing was conducted against **Dorico 6.2.30 Elements** on Windows 11 and macOS. Dorico restricts commands depending on product tier (SE, Elements, Pro). Commands requiring Pro (such as Lua scripting) return `kUnknownCommand` and are classified as `unavailable` rather than `broken`.
+Empirical testing was conducted against **Dorico Elements 6.2.30 and 6.2.40** on Windows 11 and macOS. Dorico restricts commands depending on product tier (SE, Elements, Pro). Commands requiring Pro (such as Lua scripting) return `kUnknownCommand` and are classified as `unavailable` rather than `broken`.
 
-Dorico Maestro exposes **30 tools** and one resource (`dorico://commands`) for complete command discovery.
+Dorico Maestro exposes **37 tools** and one resource (`dorico://commands`) for complete command discovery.
 
 ### A note to Steinberg (and Dorico Pro users)
 

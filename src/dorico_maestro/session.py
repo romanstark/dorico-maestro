@@ -62,28 +62,19 @@ def pitch_commands(spec: str) -> list[str]:
     ]
 
 
-#: Inputs a rest while rest mode is on; with it off, it repeats the previous pitch
-#: instead. It is the Y key (Dorico Elements 6.2.30).
+# The Y key: a rest while rest mode is on, else the previous pitch again.
 REST_KEY = "NoteInput.Pitch?Pitch=X"
 
 
 def rest_commands(rest_mode_on: bool) -> list[str]:
-    """Return the commands for one rest, leaving rest mode as it was found.
-
-    ``NoteInput.RestMode`` only toggles rest input (the comma key) and places
-    nothing; the rest itself comes from :data:`REST_KEY`.
-    """
+    """Return the commands for one rest, leaving rest mode as it was found."""
     if rest_mode_on:
         return [REST_KEY]
     return ["NoteInput.RestMode", REST_KEY, "NoteInput.RestMode"]
 
 
 async def current_status(client: object) -> dict[str, object]:
-    """Return Dorico's current status, asked fresh where the client can.
-
-    A client without status answers an empty dict, which reads as note input
-    and rest mode both off.
-    """
+    """Return Dorico's current status, asked fresh where the client can."""
     for name in ("fresh_status", "status"):
         method = getattr(client, name, None)
         if method is not None:

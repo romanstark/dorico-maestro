@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,9 @@ class FakeClient:
         self._ok = ok
         self._status = status or {}
         self.connected = True
+        self.notifications: dict[str, int] = {}
+        self.offered: dict[str, dict[str, list[str]]] = {}
+        self.replies: dict[str, dict[str, Any]] = {}
 
     async def connect(self) -> bool:
         return True
@@ -34,6 +38,21 @@ class FakeClient:
 
     async def status(self, wait: float = 2.0) -> dict[str, Any]:
         return dict(self._status)
+
+    async def fresh_status(self, wait: float = 2.0) -> dict[str, Any]:
+        return dict(self._status)
+
+    async def edition(self) -> dict[str, Any]:
+        return {"variant": "Elements", "number": "6.2.40"}
+
+    async def commands(self) -> dict[str, dict[str, list[str]]]:
+        return self.offered
+
+    async def query(self, message: str, timeout: float = 5.0, **fields: Any) -> Response:
+        data = self.replies.get(message)
+        if data is None:
+            return Response(ok=False, code="kError", detail="kNoScore")
+        return Response(ok=True, code="kOK", data=data)
 
 
 @pytest.fixture
@@ -248,10 +267,38 @@ async def test_set_key_signature_is_honest_no_send(fake: FakeClient) -> None:
 
 
 # ------------------------------------------------------------------------- save
-async def test_save_sends_file_save(fake: FakeClient) -> None:
+async def test_save_waits_for_the_file_and_tests_the_zip(
+    fake: FakeClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    project = tmp_path / "piece.dorico"
+    with zipfile.ZipFile(project, "w") as archive:
+        archive.writestr("score.dtn", b"x")
+    monkeypatch.setattr(server, "LogWatch", fake_watch([f"Saving document: 1 to {project}"]))
+
     result = await server.save()
-    assert result["success"] is True
+
+    assert result["success"] is True, result
     assert fake.sent == ["File.Save"]
+    assert result["file"]["complete"] is True
+    assert result["file"]["path"] == str(project)
+
+
+def fake_watch(lines: list[str], finished: bool = True) -> type:
+    """Return a LogWatch stand-in that has already seen ``lines``."""
+
+    class Watch:
+        available = True
+
+        def lines(self) -> list[str]:
+            return list(lines)
+
+        async def finished(self, command: str, timeout: float) -> str | None:
+            return f"notifyPostCommandExecute: {command} (5 ms)" if finished else None
+
+        async def wait_for(self, needle: str, timeout: float) -> str | None:
+            return needle
+
+    return Watch
 
 
 # ------------------------------------------------------- what a write displaces

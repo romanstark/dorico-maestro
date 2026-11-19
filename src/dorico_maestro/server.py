@@ -3,7 +3,7 @@
 This module provides the MCP interface described in docs/architecture.md:
 intent-focused tools (add notes, transpose, playback), a generic run_command
 escape hatch, and a dorico://commands resource enabling discovery of the
-354 catalogued commands without per-command tool declarations.
+367 catalogued commands without per-command tool declarations.
 
 Single-command tools route through dorico_maestro.executor.execute against the
 shared default registry. Caret and note input tools drive NoteInputSession or
@@ -22,14 +22,17 @@ import json
 import logging
 import os
 import tempfile
+import zipfile
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from dorico_maestro import playback as playsetup
 from dorico_maestro import render
+from dorico_maestro.applog import LogWatch
 from dorico_maestro.client import DoricoClient, DoricoConnectionError
 from dorico_maestro.executor import Result, execute
 from dorico_maestro.models import CmdStatus, NoteDuration
@@ -54,6 +57,11 @@ from dorico_maestro.toolargs import (
     StaffArg,
     score_dict,
 )
+
+ConfirmArg = Annotated[
+    bool,
+    Field(description="True authorises a change that discards work or cannot be undone."),
+]
 
 logging.basicConfig(level=logging.INFO)  # Log to stderr, stdout serves MCP stdio
 
@@ -198,6 +206,27 @@ def _result_dict(
     return out
 
 
+async def _not_offered(client: Any, command: str) -> dict[str, Any] | None:
+    """Return a refusal when the running Dorico does not offer ``command``, else None."""
+    lister = getattr(client, "commands", None)
+    if lister is None:
+        return None
+    try:
+        offered = await lister()
+    except (DoricoConnectionError, TimeoutError, KeyError):
+        return None
+    name = command.split("?", 1)[0]
+    if not offered or name in offered:
+        return None
+    edition = await client.edition()
+    label = " ".join(str(edition.get(k, "")) for k in ("variant", "number")).strip() or "this"
+    return {
+        "success": False,
+        "command": command,
+        "error": f"Dorico {label} does not offer {name}; nothing was sent.",
+    }
+
+
 async def _run(cmd_id: str, *, confirm: bool = False, **args: Any) -> dict[str, Any]:
     """Execute one catalogued command and return a ``{success, …}`` dict.
 
@@ -214,6 +243,10 @@ async def _run(cmd_id: str, *, confirm: bool = False, **args: Any) -> dict[str, 
     except OSError as e:
         return {"success": False, "error": f"could not load the command catalog: {e}"}
     try:
+        await client.connect()
+        refusal = await _not_offered(client, spec.id)
+        if refusal is not None:
+            return refusal
         result = await execute(client, registry, cmd_id, confirm=confirm, **args)
     except DoricoConnectionError as e:
         return {"success": False, "error": str(e)}
@@ -268,6 +301,21 @@ async def _position_caret(client: Any, bar: int, staff: int, *, pickup: bool = F
         await client.send("NoteInput.MoveRightBar")
     for _ in range(max(staff, 0)):
         await client.send("NoteInput.MoveDown")
+
+
+async def _place_caret(
+    client: Any, bar: int, staff: int, beat: float, *, pickup: bool = False
+) -> float:
+    """Place the caret at bar, staff and beat; return the beat on the grid it reached."""
+    await _position_caret(client, bar, staff, pickup=pickup)
+    if beat <= 1:
+        return 1.0
+    status = await client.status()
+    grid_ql = _GRID_QL.get(status.get("rhythmicGridResolutionValue", "kQuaver"), 0.5)
+    steps = round((beat - 1.0) / grid_ql)
+    for _ in range(max(steps, 0)):
+        await client.send("NoteInput.MoveRight")
+    return 1.0 + steps * grid_ql
 
 
 def _report_dict(report: render.RenderReport) -> dict[str, Any]:
@@ -336,11 +384,17 @@ async def connect_to_dorico() -> dict[str, Any]:
     try:
         client = _client_instance()
         await client.connect()
-        return {
+        out: dict[str, Any] = {
             "success": True,
             "status": await client.status(),
             "session_token_path": str(client.token_path),
         }
+        try:
+            out["edition"] = await client.edition()
+            out["commands_offered"] = len(await client.commands())
+        except TimeoutError:
+            out["edition"] = None
+        return out
     except DoricoConnectionError as e:
         return {"success": False, "error": str(e)}
 
@@ -865,7 +919,12 @@ async def playback(
     if a == "stop":
         return await _run("Play.Stop")
     if a == "play":
-        return await _run("Play.StartOrStop", location=location)
+        played = await _run("Play.StartOrStop", location=location)
+        if not (await _client_instance().status()).get("activatedForPlayback", True):
+            played["warning"] = (
+                "The project is not activated for playback, so nothing sounds. "
+                "Call activate_playback.")
+        return played
     if a == "rewind":
         stop = await _run("Play.Stop")
         rewind = await _run("Play.SetPlayheadToFlowStart")
@@ -878,29 +937,596 @@ async def playback(
     return {"success": False, "error": "action must be 'play', 'stop', or 'rewind'"}
 
 
-@mcp.tool(annotations=DESTROYS)
-async def save() -> dict[str, Any]:
-    """Save the open project over its existing file on disk.
+# ----------------------------------------------------------- project lifecycle
+async def _watched(client: DoricoClient, command: str, timeout: float) -> dict[str, Any]:
+    """Send a raw command and wait for Dorico's log to say it finished."""
+    watch = LogWatch()
+    before = dict(client.notifications)
+    resp = await client.send(command)
+    out: dict[str, Any] = {
+        "success": resp.ok,
+        "command": command,
+        "code": resp.code,
+    }
+    if resp.detail is not None:
+        out["detail"] = resp.detail
+    if not resp.ok:
+        return out
+    if not watch.available:
+        out["finished"] = None
+        out["finished_note"] = "Dorico's application log is not on this machine."
+    else:
+        line = await watch.finished(command.split("?", 1)[0], timeout)
+        out["finished"] = line is not None
+        if line is not None:
+            out["finish_line"] = line
+        out["log"] = watch.lines()[:40]
+    out["notifications"] = {
+        k: v - before.get(k, 0) for k, v in client.notifications.items() if v != before.get(k, 0)
+    }
+    return out
 
-    Sends File.Save, which writes the project in place. A project that has never
-    been saved has no path to write to, so this cannot be relied on to save one:
-    check that the project has a file before treating it as a save.
+
+# Playback changes are refused while the engine syncs (Dorico Elements 6.2.40).
+_ENGINE_SYNC_SECONDS = 10.0
+
+
+async def _play_change(client: DoricoClient, command: str) -> dict[str, Any]:
+    """Send a playback change, resending it while refused during an engine sync."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _ENGINE_SYNC_SECONDS
+    while True:
+        watch = LogWatch()
+        out = await _watched(client, command, 30.0)
+        if out.get("detail") != "kCommandNotAllowed" or loop.time() >= deadline:
+            break
+        await asyncio.sleep(1.0)
+    if out.get("success") and watch.available:
+        started = await watch.wait_for("Syncing Audio Engine", 1.5)
+        if started is not None:
+            synced = await watch.wait_for("Sync complete", _ENGINE_SYNC_SECONDS)
+            out["engine_synced"] = synced is not None
+    return out
+
+
+def _saved_file(lines: list[str]) -> Path | None:
+    """Return the project path a save wrote, as Dorico's log names it."""
+    for line in lines:
+        if line.startswith("Saving document: ") and " to " in line:
+            target = line.split(" to ", 1)[1].strip()
+            if target.endswith(".dorico"):
+                return Path(target)
+    return None
+
+
+async def _complete_zip(path: Path, timeout: float) -> dict[str, Any]:
+    """Wait until ``path`` stops growing and reads as a whole zip, then describe it."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    last = -1
+    while loop.time() < deadline:
+        size = path.stat().st_size if path.exists() else -1
+        if size > 0 and size == last:
+            try:
+                with zipfile.ZipFile(path) as archive:
+                    if archive.testzip() is None:
+                        return {"path": str(path), "bytes": size, "complete": True}
+            except (zipfile.BadZipFile, OSError):
+                pass
+        last = size
+        await asyncio.sleep(0.5)
+    return {"path": str(path), "bytes": max(last, 0), "complete": False}
+
+
+async def _save_and_check(command: str, timeout: float) -> dict[str, Any]:
+    """Run a save command and wait until the file on disk is a whole zip."""
+    client = _client_instance()
+    try:
+        await client.connect()
+        out = await _watched(client, command, timeout)
+    except DoricoConnectionError as e:
+        return {"success": False, "error": str(e)}
+    if not out.get("success") or not out.get("finished"):
+        return out
+    target = _saved_file(out.get("log", []))
+    if target is None:
+        out["file"] = None
+        out["file_note"] = "The log names no project file; the save may have opened a dialog."
+        return out
+    out["file"] = await _complete_zip(target, timeout)
+    out["success"] = bool(out["file"]["complete"])
+    out.pop("log", None)
+    return out
+
+
+@mcp.tool(annotations=DESTROYS)
+async def save(
+    timeout: Annotated[
+        float,
+        Field(ge=1, le=600, description="Seconds to wait for the file to be written."),
+    ] = 120.0,
+) -> dict[str, Any]:
+    """Save the open project over its file and wait until the file is complete.
 
     Returns:
-        Result dictionary reporting whether the command was accepted.
+        Result dictionary with ``file`` (path, bytes, ``complete``) once Dorico has
+        finished writing and the file reads as a whole zip.
 
     Note:
-        When to use: Save changes in an already-saved project file on disk.
-        When NOT to use: Do not use if the project has never been saved (has no
-        path). To produce a file for external use without altering the open
-        project file, use export_pdf or export_musicxml instead.
+        Dorico answers kOK before it writes: a 22 MB project was measured still being
+        written seconds later, and a copy taken then was a broken zip. So this waits
+        for Dorico's own finishing line in its application log, takes the path from
+        the log, and tests the zip. ``Notify=true`` sends no completion message
+        (Dorico Elements 6.2.40).
 
-        Acceptance is not completion here either (docs/protocol.md, "Command
-        Acceptance vs Effect"), so a kOK does not prove the file on disk has changed.
-
-        This overwrites the .dorico project file in place.
+        A project that has never been saved opens a Save As dialog here; use
+        project_file(action='save_as') for that. This overwrites the .dorico file in
+        place, and Dorico may also copy the previous version into its backup folder.
     """
-    return await _run("File.Save")
+    return await _save_and_check("File.Save", timeout)
+
+
+@mcp.tool(annotations=DESTROYS)
+async def project_file(
+    action: Annotated[
+        Literal["open", "save_as", "close", "revert"],
+        Field(description="open a project file, save under a new path, close, or revert to saved."),
+    ],
+    path: Annotated[
+        str,
+        Field(description="open and save_as: absolute path of a .dorico file."),
+    ] = "",
+    save_changes: Annotated[
+        bool,
+        Field(description="close: save before closing. False discards unsaved changes."),
+    ] = True,
+    confirm: ConfirmArg = False,
+    timeout: Annotated[
+        float,
+        Field(ge=1, le=600, description="Seconds to wait for Dorico, including any dialog."),
+    ] = 120.0,
+) -> dict[str, Any]:
+    """Open, save as, close or revert a Dorico project, and report when it is done.
+
+    Returns:
+        Result dictionary with the command, whether Dorico finished it, and for
+        save_as the written file, for open the flows of the project now active.
+
+    Note:
+        Measured in Dorico Elements 6.2.40: save_as writes without a dialog and the
+        open project becomes the new file; close with an ``openScoreID`` closes
+        without a dialog. Revert asks for confirmation in a dialog that a person must
+        answer in Dorico, and afterwards the project has a new ``openScoreID``.
+        After a close, Dorico answers queries with ``kNoScore`` until a person
+        focuses another project window.
+
+        Closing without saving and reverting discard work, so both need
+        ``confirm=True``. Opening a native project file was seen in Dorico's log
+        but not yet measured over the API.
+    """
+    client = _client_instance()
+    try:
+        await client.connect()
+        if action in ("open", "save_as"):
+            target = Path(path).expanduser()
+            if target.suffix.lower() != ".dorico" or not target.is_absolute():
+                return {"success": False, "error": "path must be an absolute .dorico path"}
+            if action == "open" and not target.is_file():
+                return {"success": False, "error": f"no such file: {target}"}
+            command = ("File.Open?File=" if action == "open" else "File.SaveAs?File=") + (
+                playsetup.value(target.as_posix()))
+            if action == "save_as":
+                if target.exists() and not confirm:
+                    return {"success": False, "error": f"{target} exists; pass confirm=True"}
+                return await _save_and_check(command, timeout)
+            out = await _watched(client, command, timeout)
+            # Activating the opened project can take 13 s (Dorico Elements 6.2.40).
+            flows = await client.query("getflows", timeout=60.0)
+            out["flows"] = (flows.data or {}).get("flows") if flows.ok else None
+            return out
+        status = await client.fresh_status()
+        score = status.get("activeOpenScoreID")
+        if action == "close":
+            if not save_changes and not confirm:
+                return {"success": False, "error": "closing without saving discards changes; "
+                        "pass confirm=True"}
+            if score is None:
+                return {"success": False, "error": "no active project (kNoScore)"}
+            flag = "true" if save_changes else "false"
+            return await _watched(
+                client, f"File.CloseProject?OpenScoreID={score}&Save={flag}", timeout)
+        if action == "revert":
+            if not confirm:
+                return {"success": False, "error": "revert discards unsaved changes; "
+                        "pass confirm=True"}
+            out = await _watched(client, "File.Revert", timeout)
+            if out.get("finished") is False:
+                out["dialog"] = "Dorico is waiting for a person to confirm the revert."
+            fresh = await client.fresh_status()
+            out["openScoreID"] = fresh.get("activeOpenScoreID")
+            return out
+    except (DoricoConnectionError, ValueError, TimeoutError) as e:
+        return {"success": False, "error": str(e) or "Dorico did not answer in time"}
+    return {"success": False, "error": f"unknown action {action!r}"}
+
+
+# ------------------------------------------------------------------- playback setup
+@mcp.tool(annotations=READS)
+async def playback_state() -> dict[str, Any]:
+    """Report whether the project can play, and which expression maps are in use.
+
+    Returns:
+        Result dictionary with ``activated_for_playback``, ``in_playback``, the
+        edition, the expression maps in the project's library (id and name), and
+        the maps used by the selected instruments when something is selected.
+
+    Note:
+        A project that is not activated for playback plays nothing, and Dorico's
+        routing menus do nothing until it is: call activate_playback first.
+
+        The Remote API has no query for VST slots, loaded plugins or channel
+        routing, so they are not here. ``selection_expression_maps`` comes from
+        ``getplaybacktechniques`` and is empty without a selection; select an
+        instrument's music first to read its map (Dorico Elements 6.2.40).
+    """
+    client = _client_instance()
+    try:
+        await client.connect()
+        status = await client.fresh_status()
+        maps = await client.query("getlibraryentities", collection="kExpressionMapCollection")
+        used = await client.query("getplaybacktechniques") if status.get("hasSelection") else None
+        edition = await client.edition()
+    except (DoricoConnectionError, TimeoutError) as e:
+        return {"success": False, "error": str(e) or "Dorico did not answer in time"}
+    out: dict[str, Any] = {
+        "success": True,
+        "edition": edition,
+        "activated_for_playback": status.get("activatedForPlayback"),
+        "in_playback": status.get("inPlayback"),
+        "expression_maps": [
+            {"id": e.get("entityID"), "name": e.get("name")}
+            for e in ((maps.data or {}).get("libraryentities") or [])
+        ] if maps.ok else None,
+        "selection_expression_maps": [
+            m.get("expressionMapID") for m in ((used.data or {}).get("expressionmaps") or [])
+        ] if used is not None and used.ok else None,
+    }
+    if not status.get("activatedForPlayback"):
+        out["warning"] = "Not activated for playback: nothing will sound. Call activate_playback."
+    return out
+
+
+@mcp.tool(annotations=SETS)
+async def activate_playback() -> dict[str, Any]:
+    """Activate the open project for playback, leaving an active project as it is.
+
+    Returns:
+        Result dictionary with ``activated_for_playback`` read back afterwards.
+
+    Note:
+        ``Play.ActivateProject`` toggles: sent to a project that is already active it
+        deactivates it (Dorico Elements 6.2.40). This reads the state first and sends
+        the command only when the project is not active.
+    """
+    client = _client_instance()
+    try:
+        await client.connect()
+        if (await client.fresh_status()).get("activatedForPlayback"):
+            return {"success": True, "activated_for_playback": True, "changed": False}
+        out = await _play_change(client, "Play.ActivateProject")
+        active = (await client.fresh_status()).get("activatedForPlayback")
+    except DoricoConnectionError as e:
+        return {"success": False, "error": str(e)}
+    out["activated_for_playback"] = active
+    out["changed"] = True
+    out["success"] = bool(out.get("success")) and bool(active)
+    out.pop("log", None)
+    return out
+
+
+@mcp.tool(annotations=READS)
+def list_plugins(
+    kind: Annotated[
+        Literal["instrument", "effect", "all"],
+        Field(description="Which plugins to list."),
+    ] = "instrument",
+    name: Annotated[str, Field(description="Part of a plugin name to filter by.")] = "",
+) -> dict[str, Any]:
+    """List the VST3 plugins Dorico's audio engine knows, with the id loading needs.
+
+    Returns:
+        Result dictionary with ``plugins`` (name, vendor, class_id, categories) and
+        the cache file they were read from.
+
+    Note:
+        Read from the audio engine's VST3 cache file, not from Dorico, so a plugin
+        installed after the engine last scanned is missing until Dorico restarts.
+    """
+    paths = playsetup.cache_paths()
+    if not paths:
+        return {"success": False, "error": "no audio engine VST3 cache on this machine"}
+    plugins = playsetup.read_plugins(paths[0])
+    if kind != "all":
+        plugins = [p for p in plugins if p.instrument == (kind == "instrument")]
+    if name:
+        plugins = playsetup.find_plugin(plugins, name)
+    return {
+        "success": True,
+        "cache": str(paths[0]),
+        "plugins": [
+            {"name": p.name, "vendor": p.vendor, "class_id": p.class_id,
+             "categories": p.categories, "content_player": p.content_player}
+            for p in sorted(plugins, key=lambda p: (p.vendor.casefold(), p.name.casefold()))
+        ],
+    }
+
+
+@mcp.tool(annotations=DESTROYS)
+async def playback_setup(
+    action: Annotated[
+        Literal["load_plugin", "remove_plugin", "enable_plugin", "disable_plugin", "route",
+                "set_expression_map"],
+        Field(description="What to change in the playback setup."),
+    ],
+    slot: Annotated[
+        int,
+        Field(ge=2, description="VST instrument slot as Dorico's window numbers it; slot 1 is "
+              "Dorico's click, so the first usable slot is 2."),
+    ],
+    plugin: Annotated[
+        str,
+        Field(description="load_plugin: plugin name or 32-digit class id, see list_plugins."),
+    ] = "",
+    instrument: Annotated[
+        int | None,
+        Field(ge=0, description="route: Dorico's instrument id; the first instrument of a "
+              "project is 0."),
+    ] = None,
+    channel: Annotated[
+        int, Field(ge=1, le=16, description="route and set_expression_map: MIDI channel.")
+    ] = 1,
+    expression_map: Annotated[
+        str,
+        Field(description="set_expression_map: map id (xmap.…) or name, see playback_state."),
+    ] = "",
+    confirm: ConfirmArg = False,
+) -> dict[str, Any]:
+    """Change VST slots, an instrument's routing, or an expression map.
+
+    Returns:
+        Result dictionary with the command sent, whether Dorico finished it, and
+        whether a playback change was signalled; ``route`` also reports the
+        endpoint and, where Dorico logs it, a verified MIDI thru change.
+
+    Note:
+        Measured in Dorico Elements 6.2.40 on a test project. The project must be
+        activated for playback, or a load is refused with ``kCommandNotAllowed``.
+        Endpoint = 1024 × (slot − 1) + channel − 1, so slot 2 channel 1 is 1024.
+
+        Loading into a slot that holds a plugin replaces it, and the instruments
+        routed to it lose their routing silently: route them again. Dorico logs
+        "slot is already occupied by the same plugin" even for a load that worked,
+        so that line is no failure signal. Removing a slot needs ``confirm=True``.
+
+        An instrument id that does not exist is answered with kOK and changes
+        nothing, and no query lists the ids. ``verified`` is True only when Dorico's
+        log shows the MIDI thru endpoint moving, which happens for the instrument
+        Dorico monitors; otherwise it is None, not False.
+    """
+    client = _client_instance()
+    try:
+        await client.connect()
+        sid = playsetup.slot_id(slot)
+        status = await client.fresh_status()
+        if not status.get("activatedForPlayback"):
+            return {"success": False, "error": "the project is not activated for playback; "
+                    "call activate_playback first"}
+        notes: list[str] = []
+        if action == "load_plugin":
+            found = playsetup.find_plugin(
+                [p for path in playsetup.cache_paths()[:1] for p in playsetup.read_plugins(path)],
+                plugin)
+            if len(found) != 1:
+                return {"success": False, "error": f"{len(found)} plugins match {plugin!r}; "
+                        "pass the class_id of the one you mean",
+                        "matches": [{"name": p.name, "class_id": p.class_id,
+                                     "categories": p.categories} for p in found[:20]]}
+            command = f"Play.LoadPlugin?SlotID={sid}&VSTPluginID={found[0].class_id}"
+            notes.append("A plugin already in this slot was replaced and its routings dropped.")
+        elif action == "remove_plugin":
+            if not confirm:
+                return {"success": False, "error": "removing a slot drops its routings; "
+                        "pass confirm=True"}
+            command = f"Play.RemovePlugin?SlotID={sid}&AlsoDelete=1"
+        elif action in ("enable_plugin", "disable_plugin"):
+            command = f"Play.EnablePlugin?SlotID={sid}&Value={int(action == 'enable_plugin')}"
+        elif action == "route":
+            if instrument is None:
+                return {"success": False, "error": "route needs instrument"}
+            command = (f"Play.SetEndpoint?InstrumentID={instrument}&TechniqueID="
+                       f"&Endpoint={playsetup.endpoint(slot, channel)}&AllFlows=1")
+        elif action == "set_expression_map":
+            maps = await client.query("getlibraryentities", collection="kExpressionMapCollection")
+            entries = (maps.data or {}).get("libraryentities") or []
+            wanted = expression_map.strip().casefold()
+            chosen = [e for e in entries if wanted in (str(e.get("entityID", "")).casefold(),
+                                                       str(e.get("name", "")).casefold())]
+            if len(chosen) != 1:
+                return {"success": False, "error": f"no single expression map {expression_map!r}",
+                        "available": [e.get("name") for e in entries]}
+            command = (f"Play.SetEndpointExpressionMap?Endpoint="
+                       f"{playsetup.endpoint(slot, channel)}&Value={chosen[0]['entityID']}")
+        else:
+            return {"success": False, "error": f"unknown action {action!r}"}
+        refusal = await _not_offered(client, command)
+        if refusal is not None:
+            return refusal
+        out = await _play_change(client, command)
+        if action == "load_plugin" and out.get("success"):
+            # Dorico opens the new plugin's window, which nothing here can operate.
+            await client.send(f"Play.ShowPlugin?SlotID={sid}&Show=0")
+        if action == "route":
+            ep = playsetup.endpoint(slot, channel)
+            out["endpoint"] = ep
+            moved = any(line == f"MIDI thru endpoint changed: {ep}" for line in out.get("log", []))
+            out["verified"] = True if moved else None
+            notes.append("Dorico also accepts an endpoint on a slot that holds no plugin; "
+                         "check the slot with playback_state or in Dorico.")
+        out["signalled"] = bool(out.get("notifications", {}).get("playbackconfigurationchanged"))
+        out.pop("log", None)
+        if notes:
+            out["notes"] = notes
+        return out
+    except (DoricoConnectionError, ValueError, OSError, TimeoutError) as e:
+        return {"success": False, "error": str(e) or "Dorico did not answer in time"}
+
+
+# --------------------------------------------------------------------------- flows
+async def _flows(client: DoricoClient) -> list[dict[str, Any]] | None:
+    """Return the active project's flows, or None when no project is active."""
+    reply = await client.query("getflows")
+    return list((reply.data or {}).get("flows") or []) if reply.ok else None
+
+
+@mcp.tool(annotations=DESTROYS)
+async def manage_flows(
+    action: Annotated[
+        Literal["list", "new", "rename", "delete"],
+        Field(description="List the flows, add one, rename one or delete one."),
+    ] = "list",
+    flow: Annotated[
+        int | None, Field(ge=0, description="rename and delete: flow id from action='list'.")
+    ] = None,
+    name: Annotated[str, Field(description="rename: the new name.")] = "",
+    confirm: ConfirmArg = False,
+    wait_seconds: Annotated[
+        float,
+        Field(ge=0, le=600, description="delete: how long to wait for the person to confirm."),
+    ] = 60.0,
+) -> dict[str, Any]:
+    """List, add, rename or delete flows of the open project by id.
+
+    Returns:
+        Result dictionary with ``flows`` (flowID and flowName) read back after the
+        change.
+
+    Note:
+        Measured in Dorico Elements 6.2.40: renaming and deleting are refused in
+        Write mode (``kCommandNotAllowed``), so this switches to Setup mode and back.
+        Deleting opens a confirmation dialog that a person must answer in Dorico;
+        this waits up to ``wait_seconds`` for the flow to disappear and says so when
+        it has not. Deleting needs ``confirm=True``. Use it to remove the extra flow
+        a MusicXML import adds.
+    """
+    client = _client_instance()
+    try:
+        await client.connect()
+        flows = await _flows(client)
+        if flows is None:
+            return {"success": False, "error": "no active project (kNoScore)"}
+        if action == "list":
+            return {"success": True, "flows": flows}
+        if action == "new":
+            out = await _watched(client, "Project.Flow.New", 15.0)
+            out.pop("log", None)
+            out["flows"] = await _flows(client)
+            out["success"] = bool(out.get("success")) and len(out["flows"] or []) > len(flows)
+            return out
+        if flow is None or flow not in {f.get("flowID") for f in flows}:
+            return {"success": False, "error": f"no flow {flow}", "flows": flows}
+        if action == "delete" and not confirm:
+            return {"success": False, "error": "deleting a flow deletes its music; "
+                    "pass confirm=True"}
+        if action == "rename" and not name.strip():
+            return {"success": False, "error": "rename needs name"}
+        mode = (await client.fresh_status()).get("windowMode") or "kWriteMode"
+        await client.send("Window.SwitchMode?WindowMode=kSetupMode")
+        try:
+            if action == "rename":
+                command = f"Project.Flow.Rename?FlowID={flow}&Name={playsetup.value(name.strip())}"
+                out = await _watched(client, command, 15.0)
+                after = await _flows(client) or []
+                out["success"] = any(
+                    f.get("flowID") == flow and f.get("flowName") == name.strip() for f in after)
+            else:
+                out = await _watched(client, f"Project.Flows.Delete?FlowIDArray={flow}",
+                                     wait_seconds)
+                after = await _flows(client) or []
+                out["success"] = flow not in {f.get("flowID") for f in after}
+                if not out["success"]:
+                    out["dialog"] = "Dorico is waiting for a person to confirm the deletion."
+        finally:
+            await client.send(f"Window.SwitchMode?WindowMode={mode}")
+        out.pop("log", None)
+        out["flows"] = after
+        return out
+    except (DoricoConnectionError, ValueError, TimeoutError) as e:
+        return {"success": False, "error": str(e) or "Dorico did not answer in time"}
+
+
+# ------------------------------------------------------------------------ markings
+# Marking kind -> (command, selected event type that proves it).
+_MARKINGS: dict[str, tuple[str, str]] = {
+    "dynamic": ("NoteInput.CreateDynamic", "kDynamicGroupEvent"),
+    "tempo": ("NoteInput.CreateTempo", "Tempo"),
+}
+
+
+@mcp.tool(annotations=ADDS)
+async def add_marking(
+    kind: Annotated[
+        Literal["dynamic", "tempo"], Field(description="dynamic (mf, sfz, ff) or tempo.")
+    ],
+    text: Annotated[
+        str,
+        Field(description="What you would type in Dorico's popover: 'mf', 'pp<', "
+              "'Allegro q=120'."),
+    ],
+    bar: BarArg,
+    staff: StaffArg = 0,
+    beat: Annotated[float, Field(ge=1, description="Beat in the bar, 1-based.")] = 1.0,
+    pickup: PickupArg = False,
+) -> dict[str, Any]:
+    """Write a dynamic or a tempo at a bar, staff and beat, without the popover.
+
+    Returns:
+        Result dictionary with the command sent and ``verified`` when Dorico
+        selected a newly created event of the expected type.
+
+    Note:
+        Places the caret the way goto_bar does, then sends the popover's command
+        with the text as ``Definition``: Dorico creates the item directly and
+        selects it (Dorico Elements 6.2.40, dynamic measured and checked in an
+        exported PDF). Mind the pickup flag: without it a flow that opens with a
+        pickup gets the marking one bar early. Note input is left afterwards.
+    """
+    command_id, expected = _MARKINGS[kind]
+    client = _client_instance()
+    try:
+        command = f"{command_id}?Definition={playsetup.value(text.strip())}"
+        await client.connect()
+        landed = await _place_caret(client, bar, staff, beat, pickup=pickup)
+        resp = await client.send(command)
+        # The status lags a moment behind the new item (Dorico Elements 6.2.40).
+        status: dict[str, Any] = {}
+        for _ in range(8):
+            status = await client.fresh_status()
+            if expected in str(status.get("selectedEventType") or ""):
+                break
+            await asyncio.sleep(0.25)
+        await client.send("NoteInput.Exit")
+    except (DoricoConnectionError, ValueError, TimeoutError) as e:
+        return {"success": False, "error": str(e) or "Dorico did not answer in time"}
+    selected = str(status.get("selectedEventType") or "")
+    verified = resp.ok and expected in selected
+    return {
+        "success": verified,
+        "command": command,
+        "code": resp.code,
+        "verified": verified,
+        "selected_event_type": selected,
+        "position": {"bar": bar, "staff": staff, "beat": landed, "pickup": pickup},
+    }
 
 
 @mcp.tool(annotations=ADDS)
@@ -992,15 +1618,7 @@ async def goto_bar(
     client = _client_instance()
     try:
         await client.connect()
-        await _position_caret(client, bar, staff, pickup=pickup)
-        landed_beat = 1.0
-        if beat > 1:
-            status = await client.status()
-            grid_ql = _GRID_QL.get(status.get("rhythmicGridResolutionValue", "kQuaver"), 0.5)
-            steps = round((beat - 1.0) / grid_ql)
-            for _ in range(max(steps, 0)):
-                await client.send("NoteInput.MoveRight")
-            landed_beat = 1.0 + steps * grid_ql
+        landed_beat = await _place_caret(client, bar, staff, beat, pickup=pickup)
     except DoricoConnectionError as e:
         return {"success": False, "error": str(e)}
     return {
@@ -1943,7 +2561,7 @@ def search_commands(
 def commands_catalog() -> str:
     """Return the complete Dorico command catalog formatted as JSON.
 
-    Exposes all 354 commands with metadata, parameter signatures, and verification
+    Exposes all 367 commands with metadata, parameter signatures, and verification
     status without requiring individual tool declarations.
     """
     try:

@@ -42,7 +42,7 @@ def test_default_registry_is_cached_singleton() -> None:
 def test_registry_loads_full_catalog() -> None:
     reg = Registry.load()
     # The Dorico 6 catalog is ~340 commands (plus a few canonical base forms).
-    assert 330 <= len(reg.all()) <= 360
+    assert 330 <= len(reg.all()) <= 380
 
 
 def test_expected_categories_present() -> None:

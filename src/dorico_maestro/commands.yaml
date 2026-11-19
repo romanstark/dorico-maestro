@@ -272,9 +272,9 @@
     doc: "Close the current tab/window; may discard unsaved changes."
   - id: "File.CloseProject"
     category: File
-    status: untested
+    status: verified
     destructive: true
-    doc: "Close the current project; may discard unsaved changes."
+    doc: "Close a project. With OpenScoreID and Save=false it closes without a dialog and discards unsaved changes (Dorico Elements 6.2.40); afterwards queries answer kNoScore until a project window is focused. Use project_file(action='close')."
   - id: "File.Exit"
     category: File
     status: untested
@@ -309,8 +309,8 @@
     doc: "Save the current project. On an untitled project this triggers a Save-As dialog the API can't fill."
   - id: "File.SaveAs"
     category: File
-    status: untested
-    doc: "Save the current project under a new name."
+    status: verified
+    doc: "Save under File=<absolute path> without a dialog; the open project becomes the new file, and Dorico may copy a backup into its backup folder (Dorico Elements 6.2.40). Use project_file(action='save_as')."
   - id: "File.ScoreInfo"
     category: File
     status: untested
@@ -377,7 +377,7 @@
   - id: "NoteInput.CreateDynamic"
     category: NoteInput
     status: verified
-    doc: "Opens Dorico's dynamics (Shift+D) popover; the Remote API cannot type into it; the user types the value (e.g. f) + Enter. Drive it via the open_popover tool. Same pattern for CreateTempo/CreateKeySignature/CreateTimeSignature/CreateClef; for a hands-free result use the MusicXML path."
+    doc: "Without parameters opens the dynamics popover. With Definition=<text> (e.g. mf) it creates the dynamic at the caret directly, no popover, and selects it as kDynamicGroupEvent (Dorico Elements 6.2.40). Use add_marking."
   - id: "NoteInput.CreateGraceNote"
     category: NoteInput
     status: verified
@@ -408,7 +408,7 @@
   - id: "NoteInput.CreateTempo"
     category: NoteInput
     status: verified
-    doc: "Opens the tempo (Shift+T) popover; the user types e.g. Allegro q=120 + Enter (the API can't type the text)."
+    doc: "Without parameters opens the tempo popover. With Definition=<text> (e.g. q = 60) it creates the tempo at the caret directly and selects it as kImmediateTempoChangeEvent (Dorico Elements 6.2.40). Use add_marking."
   - id: "NoteInput.CreateText?ParagraphStyleID=paragraph.defaulttext"
     category: NoteInput
     status: untested
@@ -1066,8 +1066,8 @@
     status: untested
   - id: "Project.Flow.New"
     category: Project
-    status: untested
-    doc: "Create a new flow."
+    status: verified
+    doc: "Add an empty flow; works in Write mode (Dorico Elements 6.2.40)."
   - id: "Project.Flow.NotationOptions"
     category: Project
     status: untested
@@ -1402,3 +1402,87 @@
     category: MusicalManipulation
     status: verified
     doc: "Opens the same modal Invert pitches dialog as InvertPitches; a person must confirm it."
+
+  # ==== playback setup, flows and project lifecycle (Remote API getcommands) ====
+  # Parameters as Dorico reports them in getcommands; effects probed on a test
+  # project (Dorico Elements 6.2.40). The dedicated tools send these with values
+  # escaped as Dorico logs them; prefer them over run_command.
+  - id: "Play.ActivateProject"
+    category: Play
+    status: verified
+    doc: "Toggle the project's activation for playback: sent to an active project it deactivates it. Read activatedForPlayback first, or use activate_playback."
+  - id: "Play.LoadPlugin"
+    category: Play
+    status: verified
+    params:
+      - {name: slot_id, dorico: SlotID, kind: int, required: true}
+      - {name: plugin_id, dorico: VSTPluginID, required: true}
+    doc: "Load a VST3 class (32-digit id, see list_plugins) into 0-based SlotID; UI slot 2 is SlotID 1. Needs an activated project (else kCommandNotAllowed). Replacing a used slot drops its routings. Use playback_setup."
+  - id: "Play.RemovePlugin"
+    category: Play
+    status: verified
+    destructive: true
+    params:
+      - {name: slot_id, dorico: SlotID, kind: int, required: true}
+      - {name: also_delete, dorico: AlsoDelete, kind: int}
+    doc: "Remove the plugin in 0-based SlotID; with AlsoDelete=1 the slot goes too. No dialog."
+  - id: "Play.EnablePlugin"
+    category: Play
+    status: verified
+    params:
+      - {name: slot_id, dorico: SlotID, kind: int, required: true}
+      - {name: value, dorico: Value, kind: int, required: true}
+    doc: "Switch the plugin in 0-based SlotID off (Value=0) or on (Value=1)."
+  - id: "Play.ShowPlugin"
+    category: Play
+    status: verified
+    params:
+      - {name: slot_id, dorico: SlotID, kind: int, required: true}
+      - {name: show, dorico: Show, kind: int}
+    doc: "Show (1) or hide (0) a slot's plugin window. The window belongs to the audio engine process, which computer-use tools cannot operate."
+  - id: "Play.SetEndpoint"
+    category: Play
+    status: verified
+    params:
+      - {name: instrument_id, dorico: InstrumentID, kind: int, required: true}
+      - {name: technique_id, dorico: TechniqueID, required: true}
+      - {name: endpoint, dorico: Endpoint, kind: int, required: true}
+    doc: "Route an instrument to Endpoint = 1024 * SlotID + channel - 1. An InstrumentID that does not exist is answered kOK and does nothing. Use playback_setup(action='route')."
+  - id: "Play.SetEndpointExpressionMap"
+    category: Play
+    status: verified
+    params:
+      - {name: endpoint, dorico: Endpoint, kind: int, required: true}
+      - {name: value, dorico: Value, required: true}
+    doc: "Set the expression map (library entity id, xmap.*) of an endpoint; read back with getplaybacktechniques on a selection."
+  - id: "Play.LoadPluginPreset"
+    category: Play
+    status: untested
+    params:
+      - {name: slot_id, dorico: SlotID, kind: int, required: true}
+      - {name: midi_port, dorico: MIDIPort, kind: int, required: true}
+      - {name: midi_channel, dorico: MIDIChannel, kind: int, required: true}
+      - {name: preset_uri, dorico: PresetURI, required: true}
+    doc: "Accepts a .vstpreset path with kOK; whether it loads the whole state was not established in one probe."
+  - id: "Project.Flow.Rename"
+    category: Project
+    status: verified
+    doc: "Rename a flow (FlowID, Name). kCommandNotAllowed in Write mode; works in Setup mode. Use manage_flows."
+  - id: "Project.Flows.Delete"
+    category: Project
+    status: verified
+    destructive: true
+    doc: "Delete flows (FlowIDArray) in Setup mode; opens a confirmation dialog a person must answer. Use manage_flows."
+  - id: "File.Revert"
+    category: File
+    status: verified
+    destructive: true
+    doc: "Revert to the saved file after a confirmation dialog; the project then has a new openScoreID."
+  - id: "Edit.GoToLocation"
+    category: Edit
+    status: untested
+    doc: "Executes with Position (quarter-note based, comma escaped as \\,) and FlowID but selects nothing; it moves the view, not the caret."
+  - id: "Project.SelectNextProofingResult"
+    category: Project
+    status: untested
+    doc: "Accepted (kOK); whether it moves the selection to the next proofreading result was not distinguishable in one probe."
