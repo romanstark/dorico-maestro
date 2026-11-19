@@ -74,7 +74,8 @@ def fake_watch(lines: list[str], finished: bool = True) -> type:
 
 @pytest.fixture
 def fake(monkeypatch: pytest.MonkeyPatch) -> FakeClient:
-    client = FakeClient(status={"activatedForPlayback": True, "windowMode": "kWriteMode"})
+    client = FakeClient(status={"activatedForPlayback": True, "windowMode": "kWriteMode",
+                                "hasScore": True})
     monkeypatch.setattr(server, "_client", None)
     monkeypatch.setattr(server, "_client_instance", lambda: client)
     monkeypatch.setattr(server, "LogWatch", fake_watch([]))
@@ -310,3 +311,11 @@ async def test_applying_a_template_needs_confirm(fake: FakeClient) -> None:
     assert refused["success"] is False and fake.sent == []
     await server.playback_setup("apply_template", confirm=True)
     assert fake.sent == ["Play.ApplyPlaybackTemplate?PlaybackTemplateID=playbacktemplate.auto"]
+
+
+async def test_without_an_active_project_the_playback_tools_say_so(fake: FakeClient) -> None:
+    fake._status["hasScore"] = False
+    for result in (await server.playback_state(), await server.activate_playback(),
+                   await server.playback_setup("route", slot=2, instrument=0)):
+        assert result["success"] is False and "kNoScore" in result["error"]
+    assert fake.sent == []

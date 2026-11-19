@@ -1152,6 +1152,10 @@ async def project_file(
 
 
 # ------------------------------------------------------------------- playback setup
+_NO_SCORE = {"success": False, "error": "no project window is active in Dorico (kNoScore); "
+             "click into the project first"}
+
+
 @mcp.tool(annotations=READS)
 async def playback_state() -> dict[str, Any]:
     """Report whether the project can play, and which expression maps are in use.
@@ -1174,6 +1178,8 @@ async def playback_state() -> dict[str, Any]:
     try:
         await client.connect()
         status = await client.fresh_status()
+        if not status.get("hasScore"):
+            return dict(_NO_SCORE)
         maps = await client.query("getlibraryentities", collection="kExpressionMapCollection")
         used = await client.query("getplaybacktechniques") if status.get("hasSelection") else None
         edition = await client.edition()
@@ -1212,7 +1218,10 @@ async def activate_playback() -> dict[str, Any]:
     client = _client_instance()
     try:
         await client.connect()
-        if (await client.fresh_status()).get("activatedForPlayback"):
+        status = await client.fresh_status()
+        if not status.get("hasScore"):
+            return dict(_NO_SCORE)
+        if status.get("activatedForPlayback"):
             return {"success": True, "activated_for_playback": True, "changed": False}
         out = await _play_change(client, "Play.ActivateProject")
         active = (await client.fresh_status()).get("activatedForPlayback")
@@ -1328,6 +1337,8 @@ async def playback_setup(
         await client.connect()
         sid = playsetup.slot_id(slot)
         status = await client.fresh_status()
+        if not status.get("hasScore"):
+            return dict(_NO_SCORE)
         if not status.get("activatedForPlayback"):
             return {"success": False, "error": "the project is not activated for playback; "
                     "call activate_playback first"}
